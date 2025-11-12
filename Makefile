@@ -11,10 +11,13 @@ all: vm
 vm: $(OBJS)
 	$(CXX) -o vm $(OBJS) $(LDFLAGS)
 
-src/main.o: src/main.cpp
+src/main.o: src/main.cpp include/headers.h.gch
+
+include/headers.h.gch: include/headers.h
+	$(CXX) $(CPPFLAGS) include/headers.h -o include/headers.h.gch
 
 clean:
-	$(RM) $(OBJS)
+	$(RM) $(OBJS) include/headers.h.gch
 
 distclean: clean
 	$(RM) vm
