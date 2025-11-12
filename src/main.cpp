@@ -1,20 +1,23 @@
 #include <headers.h>
 
-class MyWindow : public Gtk::Window
-{
+class MainWindow: public Gtk::Window {
 	public:
-	MyWindow();
+	MainWindow();
+	private:
+	Gtk::Notebook notebook;
+	Gtk::Frame tab1;
+	Gtk::Frame tab2;
 };
 
-MyWindow::MyWindow()
-{
-	set_title("Basic application");
-	set_default_size(200, 200);
+MainWindow::MainWindow(): notebook(), tab1("Tab 1"), tab2("Tab 2") {
+	notebook.append_page(tab1, "Tab 1");
+	notebook.append_page(tab2, "Tab 2");
+	set_title("Virtual machine");
+	set_default_size(800, 600);
+	set_child(notebook);
 }
 
-int main(int argc, char* argv[])
-{
-	auto app = Gtk::Application::create("org.gtkmm.examples.base");
-
-	return app->make_window_and_run<MyWindow>(argc, argv);
+int main(int argc, char* argv[]) {
+	Glib::RefPtr<Gtk::Application> app = Gtk::Application::create("org.nea.vm");
+	return app->make_window_and_run<MainWindow>(argc, argv);
 }
