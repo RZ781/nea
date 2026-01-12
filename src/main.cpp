@@ -4,6 +4,7 @@ class MainWindow: public Gtk::Window {
 	public:
 	MainWindow();
 	private:
+	void compile(void);
 	Gtk::Notebook notebook;
 	// code tab widgets
 	Gtk::Paned code_tab;
@@ -74,6 +75,7 @@ MainWindow::MainWindow():
 	compilation_options.set_margin(50);
 	source_code_view.set_monospace();
 	code_tab.set_position(500);
+	compile_button.signal_clicked().connect(compile);
 	// set up vm tab
 	notebook.append_page(vm_tab, "Virtual Machine");
 	vm_tab.append(registers_frame);
@@ -104,6 +106,29 @@ MainWindow::MainWindow():
 	set_title("Virtual machine");
 	set_default_size(800, 600);
 	set_child(notebook);
+}
+
+void MainWindow::compile(void) {
+	// save code to file
+	std::string source_code = this->source_code_view.get_buffer()->get_text();
+	std::ofstream file("source");
+	file << source_code;
+	file.close();
+	// generate command
+	std::string command = "gcc";
+	if (this->c_button.get_active()) {
+		command += " -x c";
+	} else if (this->cpp_button.get_active()) {
+		command += " -x cpp";
+	} else {
+		command += " -x assembler-with-cpp";
+	}
+	// run the command
+	std::string output, errors;
+	GLib::spawn_command_line_sync(command, output, errors);
+	if (errors.length()) {
+		exit(-1);
+	}
 }
 
 int main(int argc, char* argv[]) {
