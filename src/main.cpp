@@ -4,6 +4,7 @@ class MainWindow: public Gtk::Window {
 	public:
 	MainWindow();
 	private:
+	bool started;
 	void compile(void);
 	Gtk::Notebook notebook;
 	// code tab widgets
@@ -143,6 +144,10 @@ void MainWindow::compile(void) {
 		}
 	} else {
 		output = "Compilation failed with the following errors:\n";
+	}
+	if (errors.length() > 1000) {
+		errors.resize(1000);
+		errors += "\n(truncated to 1000 characters)";
 	}
 	output += errors;
 	compile_alert = Gtk::AlertDialog::create("Compilation finished");
