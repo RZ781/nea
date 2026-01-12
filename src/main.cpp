@@ -14,7 +14,7 @@ class MainWindow: public Gtk::Window {
 	Gtk::CheckButton asm_button;
 	Gtk::CheckButton standard_library_box;
 	Gtk::Button compile_button;
-	Gtk::AlertDialog compile_alert;
+	Glib::RefPtr<Gtk::AlertDialog> compile_alert;
 	Gtk::TextView source_code_view;
 	// virtual machine tab widgets
 	Gtk::Box vm_tab;
@@ -145,8 +145,9 @@ void MainWindow::compile(void) {
 		output = "Compilation failed with the following errors:\n";
 	}
 	output += errors;
-	compile_alert = Gtk::AlertDialog("Compilation finished");
-	compile_alert.set_message(output);
+	compile_alert = Gtk::AlertDialog::create("Compilation finished");
+	compile_alert->set_message(output);
+	compile_alert->show();
 }
 
 int main(int argc, char* argv[]) {
