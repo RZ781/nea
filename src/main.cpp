@@ -14,6 +14,7 @@ class MainWindow: public Gtk::Window {
 	Gtk::CheckButton asm_button;
 	Gtk::CheckButton standard_library_box;
 	Gtk::Button compile_button;
+	Gtk::AlertDialog compile_alert;
 	Gtk::TextView source_code_view;
 	// virtual machine tab widgets
 	Gtk::Box vm_tab;
@@ -75,7 +76,7 @@ MainWindow::MainWindow():
 	compilation_options.set_margin(50);
 	source_code_view.set_monospace();
 	code_tab.set_position(500);
-	compile_button.signal_clicked().connect(compile);
+	compile_button.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::compile));
 	// set up vm tab
 	notebook.append_page(vm_tab, "Virtual Machine");
 	vm_tab.append(registers_frame);
@@ -119,16 +120,33 @@ void MainWindow::compile(void) {
 	if (this->c_button.get_active()) {
 		command += " -x c";
 	} else if (this->cpp_button.get_active()) {
-		command += " -x cpp";
+		command += " -x c++";
 	} else {
 		command += " -x assembler-with-cpp";
 	}
-	// run the command
-	std::string output, errors;
-	GLib::spawn_command_line_sync(command, output, errors);
-	if (errors.length()) {
-		exit(-1);
+	if (!this->standard_library_box.get_active()) {
+		command += " -nostdlib -ffreestanding";
 	}
+	command += " source";
+	// run the command
+	std::string errors;
+	int status;
+	Glib::spawn_command_line_sync(command, nullptr, &errors, &status);
+	bool success = WEXITSTATUS(status) == 0;
+	// display output
+	std::string output;
+	if (success) {
+		if (errors.length() == 0) {
+			output = "Compilation succeeded without warnings";
+		} else {
+			output = "Compilation succeeded with the following warnings:\n";
+		}
+	} else {
+		output = "Compilation failed with the following errors:\n";
+	}
+	output += errors;
+	compile_alert = Gtk::AlertDialog("Compilation finished");
+	compile_alert.set_message(output);
 }
 
 int main(int argc, char* argv[]) {
