@@ -183,8 +183,14 @@ void MainWindow::step(void) {
 	std::map<std::string, int> registers = cpu->get_registers();
 	int pc = registers["pc"];
 	std::string code;
-	for (std::string line: cpu->disassemble(pc-16, pc+16)) {
-		code += line;
+	std::vector<std::string> lines = cpu->disassemble(pc - 4*10, pc + 4*10);
+	for (int i = 0; i < lines.size(); i++) {
+		if (i == lines.size() / 2) {
+			code += " > ";
+		} else {
+			code += "   ";
+		}
+		code += lines[i];
 		code += "\n";
 	}
 	vm_code.get_buffer()->set_text(code);
