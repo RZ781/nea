@@ -4,8 +4,12 @@ class MainWindow: public Gtk::Window {
 	public:
 	MainWindow();
 	private:
+	std::unique_ptr<CPU> cpu;
 	bool started;
 	void compile(void);
+	void start(void);
+	void stop(void);
+	void step(void);
 	Gtk::Notebook notebook;
 	// code tab widgets
 	Gtk::Paned code_tab;
@@ -62,6 +66,8 @@ MainWindow::MainWindow():
 	add_variable_button("Add Variable"),
 	remove_variable_button("Remove Varaiable")
 {
+	started = false;
+	cpu = std::make_unique<ExampleCPU>();
 	// set up code tab
 	notebook.append_page(code_tab, "Code");
 	code_tab.set_start_child(source_code_view);
@@ -94,6 +100,9 @@ MainWindow::MainWindow():
 	vm_code.set_monospace();
 	vm_code.set_editable(false);
 	vm_code.get_buffer()->set_text("print(\"Hello world\");)");
+	start_button.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::start));
+	stop_button.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::stop));
+	step_button.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::step));
 	// set up variables tab
 	notebook.append_page(variable_tab, "Variables");
 	variable_tab.set_start_child(variable_list);
@@ -153,6 +162,26 @@ void MainWindow::compile(void) {
 	compile_alert = Gtk::AlertDialog::create("Compilation finished");
 	compile_alert->set_message(output);
 	compile_alert->show();
+}
+
+void MainWindow::start(void) {
+	if (!started) {
+		Glib::signal_timeout().connect(sigc::mem_fun(*this, &MainWindow::timeout));
+		started = true;
+	}
+}
+
+void MainWindow::stop(void) {
+	started = false;
+}
+
+void MainWindow::step(void) {
+	cpu.step()
+}
+
+bool MainWindow::timeout(void) {
+	step();
+	return started;
 }
 
 int main(int argc, char* argv[]) {
