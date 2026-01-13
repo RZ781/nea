@@ -1,4 +1,5 @@
 #include <headers.h>
+#include "cpu.h"
 
 class MainWindow: public Gtk::Window {
 	public:
@@ -10,6 +11,7 @@ class MainWindow: public Gtk::Window {
 	void start(void);
 	void stop(void);
 	void step(void);
+	bool timeout(void);
 	Gtk::Notebook notebook;
 	// code tab widgets
 	Gtk::Paned code_tab;
@@ -65,6 +67,7 @@ MainWindow::MainWindow():
 	variable_buttons(Gtk::Orientation::VERTICAL),
 	add_variable_button("Add Variable"),
 	remove_variable_button("Remove Varaiable")
+
 {
 	started = false;
 	cpu = std::make_unique<ExampleCPU>();
@@ -166,7 +169,7 @@ void MainWindow::compile(void) {
 
 void MainWindow::start(void) {
 	if (!started) {
-		Glib::signal_timeout().connect(sigc::mem_fun(*this, &MainWindow::timeout));
+		Glib::signal_timeout().connect(sigc::mem_fun(*this, &MainWindow::timeout), 1);
 		started = true;
 	}
 }
@@ -176,7 +179,7 @@ void MainWindow::stop(void) {
 }
 
 void MainWindow::step(void) {
-	cpu.step()
+	cpu->step();
 }
 
 bool MainWindow::timeout(void) {
