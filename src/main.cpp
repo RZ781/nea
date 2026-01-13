@@ -180,6 +180,14 @@ void MainWindow::stop(void) {
 
 void MainWindow::step(void) {
 	cpu->step();
+	std::map<std::string, int> registers = cpu->get_registers();
+	int pc = registers["pc"];
+	std::string code;
+	for (std::string line: cpu->disassemble(pc-16, pc+16)) {
+		code += line;
+		code += "\n";
+	}
+	vm_code.get_buffer()->set_text(code);
 }
 
 bool MainWindow::timeout(void) {
