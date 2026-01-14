@@ -196,12 +196,20 @@ void MainWindow::step(void) {
 		code += "\n";
 	}
 	vm_code.get_buffer()->set_text(code);
+	for (Gtk::Label& label: register_names) {
+		label.unparent();
+	}
+	for (Gtk::Label& label: register_values) {
+		label.unparent();
+	}
 	register_names.clear();
 	register_values.clear();
 	int i = 0;
 	for (std::pair<std::string, int> r: registers) {
 		register_names.push_back(Gtk::Label(r.first));
+		register_names[i].set_hexpand();
 		register_values.push_back(Gtk::Label(std::to_string(r.second)));
+		register_values[i].set_hexpand();
 		this->registers.attach(register_names[i], 0, i);
 		this->registers.attach(register_values[i], 1, i);
 		i++;
