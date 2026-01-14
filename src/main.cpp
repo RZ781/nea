@@ -33,6 +33,8 @@ class MainWindow: public Gtk::Window {
 	Gtk::Button step_button;
 	Gtk::Frame vm_code_frame;
 	Gtk::TextView vm_code;
+	std::vector<Gtk::Label> register_names;
+	std::vector<Gtk::Label> register_values;
 	// variable tab widgets
 	Gtk::Paned variable_tab;
 	Gtk::Frame variable_list;
@@ -194,6 +196,16 @@ void MainWindow::step(void) {
 		code += "\n";
 	}
 	vm_code.get_buffer()->set_text(code);
+	register_names.clear();
+	register_values.clear();
+	int i = 0;
+	for (std::pair<std::string, int> r: registers) {
+		register_names.push_back(Gtk::Label(r.first));
+		register_values.push_back(Gtk::Label(std::to_string(r.second)));
+		this->registers.attach(register_names[i], 0, i);
+		this->registers.attach(register_values[i], 1, i);
+		i++;
+	}
 }
 
 bool MainWindow::timeout(void) {
