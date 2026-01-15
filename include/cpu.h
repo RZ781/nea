@@ -23,5 +23,3 @@ class ExampleCPU: public CPU {
 };
 
 #endif
-
-

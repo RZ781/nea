@@ -1,5 +1,6 @@
 #include <headers.h>
 #include "cpu.h"
+#include <libriscv/machine.hpp>
 
 class MainWindow: public Gtk::Window {
 	public:
