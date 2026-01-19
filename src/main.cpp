@@ -1,6 +1,5 @@
 #include <headers.h>
 #include "cpu.h"
-#include <libriscv/machine.hpp>
 
 class MainWindow: public Gtk::Window {
 	public:
@@ -73,7 +72,8 @@ MainWindow::MainWindow():
 
 {
 	started = false;
-	cpu = std::make_unique<ExampleCPU>();
+//	cpu = std::make_unique<ExampleCPU>();
+	cpu = std::make_unique<RiscVCPU>();
 	// set up code tab
 	notebook.append_page(code_tab, "Code");
 	code_tab.set_start_child(source_code_view);

@@ -4,6 +4,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <libriscv/machine.hpp>
 
 class CPU {
 	public:
@@ -17,6 +18,17 @@ class ExampleCPU: public CPU {
 	int program_counter;
 	public:
 	ExampleCPU(void);
+	void step(void) override;
+	std::map<std::string, int> get_registers(void) override;
+	std::vector<std::string> disassemble(int start, int end) override;
+};
+
+class RiscVCPU: public CPU {
+	private:
+	std::vector<unsigned char> guest_data;
+	riscv::Machine<riscv::RISCV32> machine;
+	public:
+	RiscVCPU(void);
 	void step(void) override;
 	std::map<std::string, int> get_registers(void) override;
 	std::vector<std::string> disassemble(int start, int end) override;
