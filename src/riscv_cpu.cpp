@@ -21,7 +21,7 @@ RiscVCPU::RiscVCPU(void):
 }
 
 void RiscVCPU::step(void) {
-	machine.simulate<false>(1);
+	machine.cpu.step_one();
 	std::cout.flush();
 }
 
