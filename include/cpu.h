@@ -27,6 +27,7 @@ class RiscVCPU: public CPU {
 	private:
 	std::vector<unsigned char> guest_data;
 	riscv::Machine<riscv::RISCV32> machine;
+	bool running;
 	public:
 	RiscVCPU(void);
 	void step(void) override;
