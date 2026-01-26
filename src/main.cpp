@@ -72,8 +72,7 @@ MainWindow::MainWindow():
 
 {
 	started = false;
-//	cpu = std::make_unique<ExampleCPU>();
-	cpu = std::make_unique<RiscVCPU>();
+	cpu = std::make_unique<ExampleCPU>();
 	// set up code tab
 	notebook.append_page(code_tab, "Code");
 	code_tab.set_start_child(source_code_view);
@@ -132,7 +131,7 @@ void MainWindow::compile(void) {
 	file << source_code;
 	file.close();
 	// generate command
-	std::string command = "gcc";
+	std::string command = "riscv32-unknown-linux-musl-gcc -static";
 	if (this->c_button.get_active()) {
 		command += " -x c";
 	} else if (this->cpp_button.get_active()) {
@@ -157,6 +156,7 @@ void MainWindow::compile(void) {
 		} else {
 			output = "Compilation succeeded with the following warnings:\n";
 		}
+		cpu = std::make_unique<RiscVCPU>();
 	} else {
 		output = "Compilation failed with the following errors:\n";
 	}

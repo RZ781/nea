@@ -6,17 +6,28 @@
 #include <libriscv/machine.hpp>
 #include <libriscv/util/load_binary_file.hpp>
 
+/*
+void write_syscall(riscv::Machine<W>& machine) {
+	std::cout << 
+}
+*/
+
 RiscVCPU::RiscVCPU(void):
-	guest_data(load_binary_file("./binary")),
+	guest_data(load_binary_file("./a.out")),
 	machine(guest_data)
-{ }
+{
+	machine.setup_linux({"./a.out"}, {"LC_TYPE=C", "LC_ALL=C", "USER=user"});
+	machine.setup_linux_syscalls();
+}
 
 void RiscVCPU::step(void) {
-	machine.simulate(1);
+	machine.simulate<false>(1);
+	std::cout.flush();
 }
 
 std::map<std::string, int> RiscVCPU::get_registers(void) {
 	std::map<std::string, int> output;
+	output["pc"] = machine.cpu.pc();
 	for (int i = 0; i < 32; i++) {
 		std::string name = "x";
 		name += std::to_string(i);

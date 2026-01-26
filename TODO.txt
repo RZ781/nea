@@ -1,0 +1,7 @@
+highest to lowest priority:
+ - arm emulation
+ - system calls
+ - riscv disassembly
+ - terminal emulator
+ - fix vm tab ui
+ - fix crash when no main
