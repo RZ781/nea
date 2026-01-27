@@ -47,6 +47,7 @@ class ArmCPU: public CPU {
 	void step(void) override;
 	std::map<std::string, int> get_registers(void) override;
 	std::vector<std::string> disassemble(int start, int end) override;
+	friend class ArmInstruction;
 };
 
 #endif

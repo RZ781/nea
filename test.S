@@ -21,4 +21,3 @@ _start:
     movs r0, #0          /* exit code */
     ldr  r7, =1          /* syscall number for sys_exit */
     swi 0                 /* make syscall */
-

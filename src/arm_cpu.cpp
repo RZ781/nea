@@ -12,6 +12,8 @@ ArmCPU::ArmCPU(void):
 	std::ifstream binary("binary");
 	binary.read((char*) memory+0x10074, sizeof(memory));
 	registers[15] = 0x10074;
+	for (int i =0; i<15;i++)
+		registers[i]=i;
 }
 
 uint32_t ArmCPU::get(uint32_t address) {
@@ -49,24 +51,39 @@ std::vector<std::string> ArmCPU::disassemble(int start, int end) {
 	return output;
 }
 
+uint16_t OperandLocation::get_operand(uint16_t instruction) {
+	return ((instruction >> shift_right) & mask) << shift_left;
+}
+
+Arm16BitEncoding encoding_table[] = {
+	{0x2000, 0xF800, OPCODE_MOV_IMMEDIATE, {.immediate={0, 0xFF}, .destination={8, 0x7}, .set_flags=true}},
+	{0x4800, 0xF800, OPCODE_LDR_LITERAL, {.immediate={0, 0xFF, 2}, .destination={8, 0x7}}},
+	{0xDF00, 0xFF00, OPCODE_SVC, {.immediate={0, 0xFF}}}
+};
+
 ArmInstruction::ArmInstruction(uint32_t value) {
 	word1 = value & 0xFFFF;
 	word2 = value >> 16;
-	uint16_t op = word1 >> 10;
-	if (op >> 1 == 0b00100) {
-		opcode = OPCODE_MOV_IMMEDIATE;
-		immediate = word1 & 0xFF;
-		destination = (word1 >> 8) & 0x7;
-		set_flags = true;
-	} else {
-		opcode = OPCODE_UNKNOWN;
+	for (Arm16BitEncoding encoding: encoding_table) {
+		if ((word1 & encoding.pattern_mask) == encoding.pattern) {
+			opcode = encoding.opcode;
+			immediate = encoding.operands.immediate.get_operand(word1);
+			destination = encoding.operands.destination.get_operand(word1);
+			set_flags = encoding.operands.set_flags;
+			length = 2;
+			return;
+		}
 	}
+	opcode = OPCODE_UNKNOWN;
 }
 
 void ArmInstruction::run(ArmCPU& cpu) {
+	uint32_t pc = cpu.registers[15] + 4;
+	cpu.registers[15] += length;
 	switch (opcode) {
 		case OPCODE_UNKNOWN:
 			std::cout << "error: unknown instruction " << std::hex << word1 << ' ' << word2 << std::dec << "\n";
+			cpu.registers[15] -= length;
 			break;
 		case OPCODE_MOV_IMMEDIATE:
 			cpu.registers[destination] = immediate;
@@ -75,7 +92,23 @@ void ArmInstruction::run(ArmCPU& cpu) {
 				cpu.condition_n = immediate >> 31;
 			}
 			break;
+		case OPCODE_LDR_LITERAL:
+			cpu.registers[destination] = cpu.get((pc & ~3) + immediate);
+			break;
+		case OPCODE_SVC:
+			std::cout << "system call " << immediate << '\n';
+			std::cout << "syscall number: " << cpu.registers[7] << '\n';
+			std::cout << "args: ";
+			for (int i = 0; i < 5; i++) {
+				std::cout << cpu.registers[i] << ' ';
+			}
+			std::cout << '\n';
+			if (cpu.registers[7] == 1) { // exit
+				cpu.running = false;
+			}
+			break;
 		default:
 			std::cout << "error: unimplemented opcode " << opcode << '\n';
+			cpu.registers[15] -= length;
 	}
 }

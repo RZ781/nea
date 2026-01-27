@@ -6,7 +6,8 @@
 enum ArmOpcode {
 	OPCODE_UNKNOWN,
 	OPCODE_MOV_IMMEDIATE,
-
+	OPCODE_LDR_LITERAL,
+	OPCODE_SVC,
 };
 
 enum ArmCondition {
@@ -27,15 +28,36 @@ enum ArmCondition {
 	CONDITION_NONE
 };
 
-struct ArmInstruction {
+struct OperandLocation {
+	int shift_right;
+	uint16_t mask;
+	int shift_left;
+	uint16_t get_operand(uint16_t instruction);
+};
+
+struct Operands {
+	OperandLocation immediate;
+	OperandLocation destination;
+	bool set_flags;
+};
+
+struct Arm16BitEncoding {
+	uint16_t pattern;
+	uint16_t pattern_mask;
+	ArmOpcode opcode;
+	Operands operands;
+};
+
+class ArmInstruction {
+	private:
 	uint16_t word1, word2;
 	ArmOpcode opcode;
 	bool set_flags;
 	int destination;
 	uint32_t immediate;
-
+	int length;
+	public:
 	ArmInstruction(uint32_t data);
-	int length();
 	std::string disassemble(void);
 	void run(ArmCPU& cpu);
 };
