@@ -72,7 +72,7 @@ MainWindow::MainWindow():
 
 {
 	started = false;
-	cpu = std::make_unique<ExampleCPU>();
+	cpu = std::make_unique<ArmCPU>();
 	// set up code tab
 	notebook.append_page(code_tab, "Code");
 	code_tab.set_start_child(source_code_view);

@@ -35,4 +35,18 @@ class RiscVCPU: public CPU {
 	std::vector<std::string> disassemble(int start, int end) override;
 };
 
+class ArmCPU: public CPU {
+	private:
+	uint32_t registers[16];
+	uint8_t memory[1<<26];
+	bool running;
+	bool condition_n, condition_z, condition_c, condition_v;
+	uint32_t get(uint32_t address);
+	public:
+	ArmCPU(void);
+	void step(void) override;
+	std::map<std::string, int> get_registers(void) override;
+	std::vector<std::string> disassemble(int start, int end) override;
+};
+
 #endif
