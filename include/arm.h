@@ -8,6 +8,11 @@ enum ArmOpcode {
 	OPCODE_MOV_IMMEDIATE,
 	OPCODE_LDR_LITERAL,
 	OPCODE_SVC,
+	OPCODE_ADD_REGISTER,
+	OPCODE_LSL_IMMEDIATE,
+	OPCODE_BL_IMMEDIATE,
+	OPCODE_ADD_IMMEDIATE,
+	OPCODE_BX
 };
 
 enum ArmCondition {
@@ -32,12 +37,12 @@ struct OperandLocation {
 	int shift_right;
 	uint16_t mask;
 	int shift_left;
+	int high_bit;
 	uint16_t get_operand(uint16_t instruction);
 };
 
 struct Operands {
-	OperandLocation immediate;
-	OperandLocation destination;
+	OperandLocation immediate, destination, source, source2;
 	bool set_flags;
 };
 
@@ -53,7 +58,7 @@ class ArmInstruction {
 	uint16_t word1, word2;
 	ArmOpcode opcode;
 	bool set_flags;
-	int destination;
+	int destination, source, source2;
 	uint32_t immediate;
 	int length;
 	public:
