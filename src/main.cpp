@@ -188,11 +188,6 @@ void MainWindow::step(void) {
 	std::string code;
 	std::vector<std::string> lines = cpu->disassemble(pc - 4*10, pc + 4*10);
 	for (int i = 0; i < lines.size(); i++) {
-		if (i == lines.size() / 2) {
-			code += " > ";
-		} else {
-			code += "   ";
-		}
 		code += lines[i];
 		code += "\n";
 	}

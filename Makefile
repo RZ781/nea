@@ -1,6 +1,6 @@
 CXX = g++
 RM = rm -f
-CPPFLAGS = -Wall -Wextra -Wpedantic -std=c++20 -Iinclude -Ilibriscv/lib -Ilibriscv/build/lib $(shell pkg-config --cflags gtkmm-4.0)
+CPPFLAGS = -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c++20 -Iinclude -Ilibriscv/lib -Ilibriscv/build/lib $(shell pkg-config --cflags gtkmm-4.0)
 LDFLAGS = -Llibriscv/build/lib -lriscv $(shell pkg-config --libs gtkmm-4.0)
 
 SRCS=src/main.cpp src/example_cpu.cpp src/riscv_cpu.cpp src/arm_cpu.cpp

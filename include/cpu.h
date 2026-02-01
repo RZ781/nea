@@ -42,6 +42,7 @@ class ArmCPU: public CPU {
 	bool running;
 	bool condition_n, condition_z, condition_c, condition_v;
 	uint32_t get(uint32_t address);
+	void set(uint32_t address, uint32_t value);
 	public:
 	ArmCPU(void);
 	void step(void) override;

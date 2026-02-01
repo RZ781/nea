@@ -12,7 +12,18 @@ enum ArmOpcode {
 	OPCODE_LSL_IMMEDIATE,
 	OPCODE_BL_IMMEDIATE,
 	OPCODE_ADD_IMMEDIATE,
-	OPCODE_BX
+	OPCODE_BX,
+	OPCODE_PUSH,
+	OPCODE_SUB_SP_IMMEDIATE,
+	OPCODE_ADD_SP_IMMEDIATE,
+	OPCODE_STR_IMMEDIATE,
+	OPCODE_LDR_IMMEDIATE,
+	OPCODE_B,
+	OPCODE_LDRB_IMMEDIATE,
+	OPCODE_CMP_IMMEDIATE,
+	OPCODE_B_CONDITIONAL,
+	OPCODE_MOV_REGISTER,
+	OPCODE_POP,
 };
 
 enum ArmCondition {
@@ -38,11 +49,12 @@ struct OperandLocation {
 	uint16_t mask;
 	int shift_left;
 	int high_bit;
-	uint16_t get_operand(uint16_t instruction);
+	uint32_t high_bit_mask;
+	uint32_t get_operand(uint16_t instruction);
 };
 
 struct Operands {
-	OperandLocation immediate, destination, source, source2;
+	OperandLocation immediate, destination, source, source2, condition;
 	bool set_flags;
 };
 
@@ -60,11 +72,13 @@ class ArmInstruction {
 	bool set_flags;
 	int destination, source, source2;
 	uint32_t immediate;
+	ArmCondition condition;
 	int length;
 	public:
 	ArmInstruction(uint32_t data);
 	std::string disassemble(void);
 	void run(ArmCPU& cpu);
+	int get_length(void);
 };
 
 #endif
