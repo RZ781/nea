@@ -16,11 +16,22 @@ void exit(int code) {
 
 void print(const char* string) {
 	syscall(1, (uint32_t) string, length(string), __NR_write);
+}
 
+void print_int(int x) {
+	char string[10];
+	int i = 0;
+	while (x) {
+		string[i] = x % 10 + '0';
+		x /= 10;
+		i++;
+	}
+	string[i] = 0;
+	print(string);
 }
 
 __attribute__((naked))
 void _start() {
-	print("Hello, world!\n");
+	print_int(67);
 	exit(0);
 }

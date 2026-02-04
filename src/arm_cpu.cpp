@@ -12,7 +12,7 @@ ArmCPU::ArmCPU(void):
 {
 	std::ifstream binary("binary");
 	binary.read((char*) memory+0x10074, sizeof(memory));
-	registers[15] = 0x100e3;
+	registers[15] = 0x10135;
 	registers[13] = (sizeof(memory) - 1) & ~3;
 }
 
