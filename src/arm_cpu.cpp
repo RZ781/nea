@@ -11,15 +11,16 @@ ArmCPU::ArmCPU(void):
 	running(true)
 {
 	std::ifstream binary("binary");
-	binary.read((char*) memory+0x10074, sizeof(memory));
-	registers[15] = 0x10135;
+	binary.read((char*) memory+0x100b4, sizeof(memory));
+	registers[15] = 0x100d9;
 	registers[13] = (sizeof(memory) - 1) & ~3;
 }
 
 uint32_t ArmCPU::get(uint32_t address) {
 	uint32_t value = 0;
+	uint32_t address_mask = sizeof(memory) - 1;
 	for (int i = 0; i < 4; i++) {
-		value |= memory[address + i] << (i * 8);
+		value |= memory[(address + i) & address_mask] << (i * 8);
 	}
 	return value;
 }
@@ -102,8 +103,33 @@ Arm16BitEncoding encoding_table[] = {
 	{0x3000, 0xF800, OPCODE_ADD_IMMEDIATE, {.immediate={0, 0xFF}, .destination={8, 0x7}, .source={8, 0x7}}},
 	{0x4600, 0xFF00, OPCODE_MOV_REGISTER, {.destination={0, 0x7, 0, 7, 0x8}, .source={3, 0xF}}},
 	{0xB000, 0xFF80, OPCODE_ADD_SP_IMMEDIATE, {.immediate={0, 0x7F, 2}, .destination={0, 0, 0, 15, 13}}},
-	{0xBC00, 0xFE00, OPCODE_POP, {.immediate={0, 0xFF, 0, 8, 0x8000}}}
+	{0xBC00, 0xFE00, OPCODE_POP, {.immediate={0, 0xFF, 0, 8, 0x8000}}},
+	{0x1000, 0xF800, OPCODE_ASR_IMMEDIATE, {.immediate={6, 0x1F}, .destination={0, 0x7}, .source={3, 0x7}}},
+	{0xB100, 0xFD00, OPCODE_CBZ, {.immediate={3, 0x1F, 1, 9, 0x40}, .destination={0, 0x7}}},
 };
+
+uint32_t expand_immediate(uint16_t immediate, bool* carry) {
+	if ((immediate & 0xC00) == 0) {
+		uint8_t byte = immediate & 0xFF;
+		switch (immediate & 0x300) {
+			case 0x000:
+				return byte;
+			case 0x100:
+				return byte | (byte << 16);
+			case 0x200:
+				return (byte << 8) | (byte << 24);
+			case 0x300:
+				return byte | (byte << 8) | (byte << 16) | (byte << 24);
+		}
+	} else {
+		// cool analysis of the original pseudocode the value is 8 bits and the shift is always greater than 8 so we can erase the first part of the ror
+		uint32_t value = (immediate & 0x7F) | 0x80;
+		uint32_t shift = (immediate & 0xF80) >> 7;
+		value <<= (32 - shift);
+		*carry = value >> 31;
+		return value;
+	}
+}
 
 ArmInstruction::ArmInstruction(uint32_t value) {
 	word1 = value & 0xFFFF;
@@ -123,6 +149,33 @@ ArmInstruction::ArmInstruction(uint32_t value) {
 		length = 4;
 		return;
 	}
+	if ((word1 & 0xFBF0) == 0xF240 && (word2 & 0x8000) == 0) { // MOV immediate encoding T3
+		opcode = OPCODE_MOV_IMMEDIATE;
+		immediate = (word2 & 0xFF) | ((word2 >> 12) << 8) | (((word1 & 0x400) >> 10) << 11) | ((word1 & 0xF) << 12);
+		destination = (word2 & 0xF00) >> 8;
+		set_flags = false;
+		length = 4;
+		return;
+	}
+	if ((word1 & 0xFBF0) == 0xF2C0 && (word2 & 0x8000) == 0) { // MOVT immediate encoding T1
+		opcode = OPCODE_MOVT;
+		immediate = (word2 & 0xFF) | ((word2 >> 12) << 8) | (((word1 & 0x400) >> 10) << 11) | ((word1 & 0xF) << 12);
+		destination = (word2 & 0xF00) >> 8;
+		length = 4;
+		return;
+	}
+	if ((word1 & 0xFBEF) == 0xF04F && (word2 & 0x8000) == 0) { // MOV immediate encoding T2
+		opcode = OPCODE_MOV_IMMEDIATE;
+		int i = (word1 >> 10) & 1;
+		int imm8 = word2 & 0xFF;
+		int imm3 = (word2 >> 12) & 0x7;
+		bool temp = false;
+		immediate = expand_immediate(imm8 | (imm3 << 8) | (i << 11), &temp);
+		destination = (word2 & 0xF00) >> 8;
+		set_flags = (word1 & 0x10) >> 4;
+		length = 4;
+		return;
+	}
 	for (Arm16BitEncoding encoding: encoding_table) {
 		if ((word1 & encoding.pattern_mask) == encoding.pattern) {
 			opcode = encoding.opcode;
@@ -139,7 +192,6 @@ ArmInstruction::ArmInstruction(uint32_t value) {
 	opcode = OPCODE_UNKNOWN;
 	length = 4;
 }
-
 
 bool add_carry(uint32_t x, uint32_t y, bool carry) {
 	uint64_t result = x + y + carry;
@@ -282,6 +334,22 @@ void ArmInstruction::run(ArmCPU& cpu) {
 				cpu.registers[13] += 4;
 			}
 			break;
+		case OPCODE_ASR_IMMEDIATE:
+			if (immediate == 0) {
+				cpu.registers[destination] = ((int32_t) cpu.registers[source]) >= 0 ? 0 : -1;
+			} else {
+				cpu.registers[destination] = cpu.registers[source] >> immediate;
+			}
+			break;
+		case OPCODE_MOVT:
+			cpu.registers[destination] &= 0xFFFF;
+			cpu.registers[destination] |= immediate << 16;
+			break;
+		case OPCODE_CBZ:
+			if (cpu.registers[source] == 0) {
+				next_pc = pc + ((int32_t) immediate | 1);
+			}
+			break;
 		default:
 			std::cout << "warning: unimplemented opcode " << opcode << '\n';
 	}
@@ -309,6 +377,9 @@ std::string opcode_names[] = {
 	"B_CONDITIONAL",
 	"MOV_REGISTER",
 	"POP",
+	"ASR_IMMEDIATE",
+	"MOVT",
+	"CBZ",
 };
 
 std::string ArmInstruction::disassemble(void) {
