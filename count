@@ -1,0 +1,4 @@
+#!/bin/bash
+
+wc -l src/*.cpp
+wc -l src/*.cpp include/*.h

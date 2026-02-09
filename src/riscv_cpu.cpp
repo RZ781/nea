@@ -15,6 +15,11 @@ RiscVCPU::RiscVCPU(void):
 	machine.setup_linux_syscalls();
 }
 
+uint32_t RiscVCPU::get(uint32_t address) {
+	// TODO
+	return address;
+}
+
 void RiscVCPU::step(void) {
 	if (!running)
 		return;

@@ -1,7 +1,12 @@
 highest to lowest priority:
- - arm emulation
+ - variables updating after step
+ - removing variables
+ - working compilation
+ - more arm emulation
  - system calls
+ - arm disassembly
  - riscv disassembly
  - terminal emulator
  - fix vm tab ui
- - fix crash when no main
+ - fix crash when no main in riscv
+ - libc for arm

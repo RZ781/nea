@@ -9,6 +9,10 @@ void ExampleCPU::step(void) {
 	program_counter += 4;
 }
 
+uint32_t ExampleCPU::get(uint32_t address) {
+	return address;
+}
+
 std::map<std::string, int> ExampleCPU::get_registers(void) {
 	std::map<std::string, int> output;
 	output["pc"] = program_counter;

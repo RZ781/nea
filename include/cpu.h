@@ -11,6 +11,7 @@ class CPU {
 	virtual void step(void) = 0;
 	virtual std::map<std::string, int> get_registers(void) = 0;
 	virtual std::vector<std::string> disassemble(int start, int end) = 0;
+	virtual uint32_t get(uint32_t address) = 0;
 };
 
 class ExampleCPU: public CPU {
@@ -21,6 +22,7 @@ class ExampleCPU: public CPU {
 	void step(void) override;
 	std::map<std::string, int> get_registers(void) override;
 	std::vector<std::string> disassemble(int start, int end) override;
+	uint32_t get(uint32_t address);
 };
 
 class RiscVCPU: public CPU {
@@ -33,6 +35,7 @@ class RiscVCPU: public CPU {
 	void step(void) override;
 	std::map<std::string, int> get_registers(void) override;
 	std::vector<std::string> disassemble(int start, int end) override;
+	uint32_t get(uint32_t address);
 };
 
 class ArmCPU: public CPU {
@@ -41,13 +44,13 @@ class ArmCPU: public CPU {
 	uint8_t memory[1<<26];
 	bool running;
 	bool condition_n, condition_z, condition_c, condition_v;
-	uint32_t get(uint32_t address);
 	void set(uint32_t address, uint32_t value);
 	public:
 	ArmCPU(void);
 	void step(void) override;
 	std::map<std::string, int> get_registers(void) override;
 	std::vector<std::string> disassemble(int start, int end) override;
+	uint32_t get(uint32_t address);
 	friend class ArmInstruction;
 };
 
