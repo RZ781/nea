@@ -1,6 +1,4 @@
 highest to lowest priority:
- - variables updating after step
- - removing variables
  - working compilation
  - more arm emulation
  - system calls

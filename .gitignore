@@ -3,5 +3,4 @@
 *.swp
 vm
 source
-a.out
 libriscv

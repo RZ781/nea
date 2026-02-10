@@ -1,6 +1,6 @@
 #!/bin/sh
 
-arm-unknown-linux-musleabi-gcc test.c test.S -o a.out -static -mthumb -nostdlib -ffreestanding -lgcc
-arm-unknown-linux-musleabi-objcopy -O binary a.out binary
-arm-unknown-linux-musleabi-objdump a.out -f
-arm-unknown-linux-musleabi-objdump a.out -h
+arm-none-eabi-gcc test.c test.S -o a.out -static -mthumb -nostdlib -ffreestanding -lgcc -I/usr/include -mcpu=cortex-m0
+arm-none-eabi-objcopy -O binary a.out binary
+arm-none-eabi-objdump a.out -f
+arm-none-eabi-objdump a.out -h

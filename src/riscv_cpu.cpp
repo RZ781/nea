@@ -5,6 +5,7 @@
 #include "cpu.h"
 #include <libriscv/machine.hpp>
 #include <libriscv/util/load_binary_file.hpp>
+#include <libriscv/rv32i_instr.hpp>
 
 RiscVCPU::RiscVCPU(void):
 	guest_data(load_binary_file("./a.out")),
@@ -16,8 +17,8 @@ RiscVCPU::RiscVCPU(void):
 }
 
 uint32_t RiscVCPU::get(uint32_t address) {
-	// TODO
-	return address;
+	uint32_t value = machine.memory.read<uint32_t>(address);
+	return value;
 }
 
 void RiscVCPU::step(void) {
@@ -46,7 +47,10 @@ std::map<std::string, int> RiscVCPU::get_registers(void) {
 std::vector<std::string> RiscVCPU::disassemble(int start, int end) {
 	std::vector<std::string> output;
 	for (int i = start; i <= end; i += 4) {
-		output.push_back(std::to_string(i));
+		riscv::instruction_format instruction(get(i));
+		//char buffer[512];
+		//instruction.printer(buffer, sizeof(buffer), machine.cpu, instruction);
+		output.push_back(machine.cpu.to_string(instruction));
 	}
 	return output;
 }

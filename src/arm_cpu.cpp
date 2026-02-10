@@ -11,8 +11,8 @@ ArmCPU::ArmCPU(void):
 	running(true)
 {
 	std::ifstream binary("binary");
-	binary.read((char*) memory+0x10078, sizeof(memory));
-	registers[15] = 0x1014d;
+	binary.read((char*) memory+0x8000, sizeof(memory));
+	registers[15] = 0x80d1;
 	registers[13] = (sizeof(memory) - 1) & ~3;
 }
 
@@ -383,8 +383,55 @@ std::string opcode_names[] = {
 };
 
 std::string ArmInstruction::disassemble(void) {
-	if (opcode == OPCODE_UNKNOWN) {
-		return std::format(".word 0x{:X}", (uint32_t) (word1 | (word2 << 16)));
+	switch (opcode) {
+		case OPCODE_UNKNOWN:
+			return std::format(".word 0x{:X}", (uint32_t) (word1 | (word2 << 16)));
+		case OPCODE_MOV_IMMEDIATE:
+			return std::format("mov{} r{}, #{}", set_flags ? "s" : "", destination, immediate);
+		case OPCODE_LDR_LITERAL:
+			return std::format("ldr r{}, [pc, #{}]", destination, immediate);
+		case OPCODE_SVC:
+			return std::format("svc {}", immediate);
+		case OPCODE_ADD_REGISTER:
+			return std::format("add r{}, r{}, r{}", destination, source, source2);
+		case OPCODE_LSL_IMMEDIATE:
+			return std::format("lsl r{}, r{}, #{}", destination, source, immediate);
+		case OPCODE_BL_IMMEDIATE:
+			return std::format("bl <pc+{}>", immediate);
+		case OPCODE_ADD_IMMEDIATE:
+			return std::format("add r{}, r{}, #{}", destination, source, immediate);
+		case OPCODE_BX:
+			return std::format("bx r{}", source);
+		case OPCODE_PUSH:
+			// TODO
+			return std::format("push registers {}", immediate);
+		case OPCODE_SUB_SP_IMMEDIATE:
+			return std::format("sub sp, #{}", immediate);
+		case OPCODE_ADD_SP_IMMEDIATE:
+			return std::format("sub r{}, sp, #{}", destination, immediate);
+		case OPCODE_STR_IMMEDIATE:
+			return std::format("str r{}, [r{}, #{}]", source, source2, immediate);
+		case OPCODE_LDR_IMMEDIATE:
+			return std::format("ldr r{}, [r{}, #{}]", destination, source, immediate);
+		case OPCODE_B:
+			return std::format("b <pc+{}>", immediate);
+		case OPCODE_LDRB_IMMEDIATE:
+			return std::format("ldrb r{}, [r{}, #{}]", destination, source, immediate);
+		case OPCODE_CMP_IMMEDIATE:
+			return std::format("cmp r{}, #{}", source, immediate);
+		case OPCODE_B_CONDITIONAL:
+			// TODO
+			return std::format("b.{} <pc+{}>", (int) condition, immediate);
+		case OPCODE_MOV_REGISTER:
+			return std::format("mov ");
+		case OPCODE_POP:
+			return "";
+		case OPCODE_ASR_IMMEDIATE:
+			return "";
+		case OPCODE_MOVT:
+			return "";
+		case OPCODE_CBZ:
+			return "";
 	}
 	return std::format("{} r{} r{} r{} 0x{:X}", opcode_names[(int) opcode], destination, source, source2, immediate);
 }
