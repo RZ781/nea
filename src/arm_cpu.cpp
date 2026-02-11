@@ -106,6 +106,14 @@ Arm16BitEncoding encoding_table[] = {
 	{0xBC00, 0xFE00, OPCODE_POP, {.immediate={0, 0xFF, 0, 8, 0x8000}}},
 	{0x1000, 0xF800, OPCODE_ASR_IMMEDIATE, {.immediate={6, 0x1F}, .destination={0, 0x7}, .source={3, 0x7}}},
 	{0xB100, 0xFD00, OPCODE_CBZ, {.immediate={3, 0x1F, 1, 9, 0x40}, .destination={0, 0x7}}},
+	{0x4300, 0xFFC0, OPCODE_ORR_REGISTER, {.destination={0, 0x7}, .source={0, 0x7}, .source2={3, 0x7}, .set_flags=true}},
+	{0x0800, 0xF800, OPCODE_LSR_IMMEDIATE, {.immediate={6, 0x1F}, .destination={0, 0x7}, .source={3, 0x7}}},
+	{0x4300, 0xFF00, OPCODE_CMP_REGISTER, {.source={0, 0x7, 0, 7, 0x8}, .source2={3, 0xF}}},
+	{0x1A00, 0xFE00, OPCODE_SUB_REGISTER, {.destination={0, 0x7}, .source={3, 0x7}, .source2={6, 0x7}}},
+	{0x4280, 0xFFC0, OPCODE_CMP_REGISTER, {.source={0, 0x7}, .source2={3, 0x7}}},
+	{0x4140, 0xFFC0, OPCODE_ADC_REGISTER, {.destination={0, 0x7}, .source={0, 0x7}, .source2={3, 0x7}, .set_flags=true}},
+	{0xB2C0, 0xFFC0, OPCODE_UXTB, {.destination={0, 0x7}, .source{3, 0x7}}},
+	{0x7000, 0xF800, OPCODE_STRB_IMMEDIATE, {.immediate={6, 0x1F, 2}, .source={0, 0x7}, .source2={3, 0x7}}}
 };
 
 uint32_t expand_immediate(uint16_t immediate, bool* carry) {
@@ -190,12 +198,17 @@ ArmInstruction::ArmInstruction(uint32_t value) {
 		}
 	}
 	opcode = OPCODE_UNKNOWN;
-	length = 4;
+	uint16_t top_5 = word1 >> 11;
+	if (top_5 == 0b11101 || top_5 == 0b11110 || top_5 == 0b11111) {
+		length = 4;
+	} else {
+		length = 2;
+	}
 }
 
 bool add_carry(uint32_t x, uint32_t y, bool carry) {
-	uint64_t result = x + y + carry;
-	return result > 0xFFFFFFFF;
+	uint64_t result = (uint64_t) x + (uint64_t) y + carry;
+	return (result >> 32) > 0;
 }
 
 bool add_overflow(int32_t x, int32_t y, bool carry) {
@@ -350,6 +363,47 @@ void ArmInstruction::run(ArmCPU& cpu) {
 				next_pc = pc + ((int32_t) immediate | 1);
 			}
 			break;
+		case OPCODE_ORR_REGISTER:
+			cpu.registers[destination] = cpu.registers[source] | cpu.registers[source2];
+			if (set_flags) {
+				cpu.condition_n = cpu.registers[destination] >> 31;
+				cpu.condition_z = cpu.registers[destination] == 0;
+			}
+			break;
+		case OPCODE_LSR_IMMEDIATE:
+			if (immediate == 0) {
+				cpu.registers[destination] = 0;
+			} else {
+				cpu.registers[destination] = cpu.registers[source] >> immediate;
+			}
+			break;
+		case OPCODE_CMP_REGISTER:
+			cpu.condition_n = (int32_t) (cpu.registers[source] - cpu.registers[source2]) < 0;
+			cpu.condition_z = cpu.registers[source] == cpu.registers[source2];
+			cpu.condition_c = add_carry(cpu.registers[source], ~cpu.registers[source2], 1);
+			cpu.condition_v = add_overflow(cpu.registers[source], ~cpu.registers[source2], 1);
+			break;
+		case OPCODE_SUB_REGISTER:
+			cpu.registers[destination] = cpu.registers[source] - cpu.registers[source2];
+			break;
+		case OPCODE_ADC_REGISTER:
+		{
+			uint32_t result = cpu.registers[source] + cpu.registers[source2] + cpu.condition_c;
+			bool carry = add_carry(cpu.registers[source], cpu.registers[source2], cpu.condition_c);
+			bool overflow = add_overflow(cpu.registers[source], cpu.registers[source2], cpu.condition_c);
+			cpu.registers[destination] = result;
+			cpu.condition_c = carry;
+			cpu.condition_v = overflow;
+			cpu.condition_n = result >> 31;
+			cpu.condition_z = result == 0;
+			break;
+		}
+		case OPCODE_UXTB:
+			cpu.registers[destination] = cpu.registers[source];
+			break;
+		case OPCODE_STRB_IMMEDIATE:
+			cpu.memory[cpu.registers[source2] + immediate] = cpu.registers[source];
+			break;
 		default:
 			std::cout << "warning: unimplemented opcode " << opcode << '\n';
 	}
@@ -380,6 +434,13 @@ std::string opcode_names[] = {
 	"ASR_IMMEDIATE",
 	"MOVT",
 	"CBZ",
+	"ORR_REGISTER",
+	"LSR_IMMEDIATE",
+	"CMP_REGISTER",
+	"SUB_REGISTER",
+	"ADC_REGISTER",
+	"UXTB",
+	"STRB_IMMEDIATE"
 };
 
 std::string ArmInstruction::disassemble(void) {
@@ -422,6 +483,7 @@ std::string ArmInstruction::disassemble(void) {
 		case OPCODE_B_CONDITIONAL:
 			// TODO
 			return std::format("b.{} <pc+{}>", (int) condition, immediate);
+/*
 		case OPCODE_MOV_REGISTER:
 			return std::format("mov ");
 		case OPCODE_POP:
@@ -432,6 +494,14 @@ std::string ArmInstruction::disassemble(void) {
 			return "";
 		case OPCODE_CBZ:
 			return "";
+		case OPCODE_ORR_REGISTER:
+			return "";
+		case OPCODE_LSR_IMMEDIATE:
+			return "";
+		case OPCODE_CMP_REGISTER:
+			return "";
+		case OPCODE_SUB_REGISTER:
+			return "";*/
 	}
 	return std::format("{} r{} r{} r{} 0x{:X}", opcode_names[(int) opcode], destination, source, source2, immediate);
 }

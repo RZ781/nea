@@ -11,11 +11,11 @@ int length(const char* string) {
 }
 
 void exit(int code) {
-	syscall(code, 0, 0, __NR_exit);
+	syscall(code, 0, 0, 1);
 }
 
 void print(const char* string) {
-	syscall(1, (uint32_t) string, length(string), __NR_write);
+	syscall(1, (uint32_t) string, length(string), 4);
 }
 
 void print_int(int x) {

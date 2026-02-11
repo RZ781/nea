@@ -136,7 +136,7 @@ MainWindow::MainWindow():
 	vm_code_frame.set_child(vm_code);
 	vm_code.set_monospace();
 	vm_code.set_editable(false);
-	vm_code.get_buffer()->set_text("print(\"Hello world\");)");
+	vm_code.get_buffer()->set_text("print(\"Hello world\");");
 	start_button.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::start));
 	stop_button.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::stop));
 	step_button.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::step));
