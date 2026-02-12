@@ -26,8 +26,9 @@ uint32_t ArmCPU::get(uint32_t address) {
 }
 
 void ArmCPU::set(uint32_t address, uint32_t value) {
+	uint32_t address_mask = sizeof(memory) - 1;
 	for (int i = 0; i < 4; i++) {
-		memory[address + i] = (value >> (i * 8)) & 0xFF;
+		memory[(address + i) & address_mask] = (value >> (i * 8)) & 0xFF;
 	}
 }
 
@@ -113,7 +114,23 @@ Arm16BitEncoding encoding_table[] = {
 	{0x4280, 0xFFC0, OPCODE_CMP_REGISTER, {.source={0, 0x7}, .source2={3, 0x7}}},
 	{0x4140, 0xFFC0, OPCODE_ADC_REGISTER, {.destination={0, 0x7}, .source={0, 0x7}, .source2={3, 0x7}, .set_flags=true}},
 	{0xB2C0, 0xFFC0, OPCODE_UXTB, {.destination={0, 0x7}, .source{3, 0x7}}},
-	{0x7000, 0xF800, OPCODE_STRB_IMMEDIATE, {.immediate={6, 0x1F, 2}, .source={0, 0x7}, .source2={3, 0x7}}}
+	{0x7000, 0xF800, OPCODE_STRB_IMMEDIATE, {.immediate={6, 0x1F, 2}, .source={0, 0x7}, .source2={3, 0x7}}},
+	{0x4000, 0xFFC0, OPCODE_AND_REGISTER, {.destination={0, 0x7}, .source={0, 0x7}, .source2={3, 0x7}, .set_flags=true}},
+	{0xC000, 0xF800, OPCODE_STM, {.immediate={0, 0xFF}, .source={8, 0x7}}},
+	{0x5000, 0xFE00, OPCODE_STR_REGISTER, {.destination={0, 0x7}, .source={3, 0x7}, .source2={6, 0x7}}},
+	{0xC800, 0xF800, OPCODE_LDM, {.immediate={0, 0xFF}, .source={8, 0x7}}},
+	{0x4200, 0xFFC0, OPCODE_TST_REGISTER, {.source={0, 0x7}, .source2={3, 0x7}}},
+	{0x9000, 0xF800, OPCODE_STR_IMMEDIATE, {.immediate={0, 0xFF, 2}, .source={8, 0x7}, .source2={0, 0, 0, 15, 13}}},
+	{0x4780, 0xFF80, OPCODE_BLX_REGISTER, {.source={3, 0xF}}},
+	{0x9800, 0xF800, OPCODE_LDR_IMMEDIATE, {.immediate={0, 0xFF, 2}, .destination={0, 0x7}, .source={3, 0x7}}},
+	{0x4240, 0xFFC0, OPCODE_RSB_IMMEDIATE, {.immediate={0, 0}, .destination={0, 0x7}, .source={3, 0x7}}},
+	{0x5E00, 0xFE00, OPCODE_LDRSH_REGISTER, {.destination={0, 0x7}, .source={3, 0x7}, .source2={6, 0x7}}},
+	{0x1E00, 0xFE00, OPCODE_SUB_IMMEDIATE, {.immediate={6, 0x7}, .destination={0, 0x7}, .source={3, 0x7}, .set_flags=true}},
+	{0x3800, 0xF800, OPCODE_SUB_IMMEDIATE, {.immediate={0, 0xFF}, .destination={8, 0x7}, .source={8, 0x7}, .set_flags=true}},
+	{0x4080, 0xFFC0, OPCODE_LSL_REGISTER, {.destination={0, 0x7}, .source={0, 0x7}, .source2={3, 0x7}}},
+	{0x8000, 0xF800, OPCODE_STRH_IMMEDIATE, {.immediate={6, 0x1F, 1}, .source={0, 0x7}, .source2={3, 0x7}}},
+	{0x8800, 0xF800, OPCODE_LDRH_IMMEDIATE, {.immediate={6, 0x1F, 1}, .destination={0, 0x7}, .source={3, 0x7}}},
+	{0xBA00, 0xFFC0, OPCODE_REV, {.destination={0, 0x7}, .source={3, 0x7}}},
 };
 
 uint32_t expand_immediate(uint16_t immediate, bool* carry) {
@@ -137,6 +154,7 @@ uint32_t expand_immediate(uint16_t immediate, bool* carry) {
 		*carry = value >> 31;
 		return value;
 	}
+	return 0;
 }
 
 ArmInstruction::ArmInstruction(uint32_t value) {
@@ -157,7 +175,7 @@ ArmInstruction::ArmInstruction(uint32_t value) {
 		length = 4;
 		return;
 	}
-	if ((word1 & 0xFBF0) == 0xF240 && (word2 & 0x8000) == 0) { // MOV immediate encoding T3
+/*	if ((word1 & 0xFBF0) == 0xF240 && (word2 & 0x8000) == 0) { // MOV immediate encoding T3
 		opcode = OPCODE_MOV_IMMEDIATE;
 		immediate = (word2 & 0xFF) | ((word2 >> 12) << 8) | (((word1 & 0x400) >> 10) << 11) | ((word1 & 0xF) << 12);
 		destination = (word2 & 0xF00) >> 8;
@@ -183,7 +201,7 @@ ArmInstruction::ArmInstruction(uint32_t value) {
 		set_flags = (word1 & 0x10) >> 4;
 		length = 4;
 		return;
-	}
+	}*/
 	for (Arm16BitEncoding encoding: encoding_table) {
 		if ((word1 & encoding.pattern_mask) == encoding.pattern) {
 			opcode = encoding.opcode;
@@ -239,6 +257,15 @@ bool evaluate_condition(ArmCondition condition, bool n, bool z, bool c, bool v) 
 	}
 }
 
+uint32_t ArmInstruction::add_set_flags(uint32_t x, uint32_t y, bool carry, ArmCPU& cpu) {
+	uint32_t result = x + y + carry;
+	cpu.condition_n = result >> 31;
+	cpu.condition_z = result == 0;
+	cpu.condition_c = add_carry(x, y, carry);
+	cpu.condition_v = add_overflow(x, y, carry);
+	return result;
+}
+
 void ArmInstruction::run(ArmCPU& cpu) {
 	// todo: fix writing to pc
 	uint32_t next_pc = cpu.registers[15] + length;
@@ -271,7 +298,7 @@ void ArmInstruction::run(ArmCPU& cpu) {
 			}
 			break;
 		case OPCODE_ADD_REGISTER:
-			cpu.registers[destination] = cpu.registers[source] + cpu.registers[source2];
+			cpu.registers[destination] = add_set_flags(cpu.registers[source], cpu.registers[source2], 0, cpu);
 			break;
 		case OPCODE_LSL_IMMEDIATE:
 			cpu.registers[destination] = cpu.registers[source] << immediate;
@@ -281,7 +308,7 @@ void ArmInstruction::run(ArmCPU& cpu) {
 			next_pc = pc + ((int32_t) immediate | 1);
 			break;
 		case OPCODE_ADD_IMMEDIATE:
-			cpu.registers[destination] = cpu.registers[source] + immediate;
+			cpu.registers[destination] = add_set_flags(cpu.registers[source], immediate, 0, cpu);
 			break;
 		case OPCODE_BX:
 			next_pc = cpu.registers[source];
@@ -322,10 +349,7 @@ void ArmInstruction::run(ArmCPU& cpu) {
 			cpu.registers[destination] = cpu.get(cpu.registers[source] + immediate) & 0xFF;
 			break;
 		case OPCODE_CMP_IMMEDIATE:
-			cpu.condition_n = (int32_t) (cpu.registers[source] - immediate) < 0;
-			cpu.condition_z = cpu.registers[source] == immediate;
-			cpu.condition_c = add_carry(cpu.registers[source], ~immediate, 1);
-			cpu.condition_v = add_overflow(cpu.registers[source], ~immediate, 1);
+			add_set_flags(cpu.registers[source], ~immediate, 1, cpu);
 			break;
 		case OPCODE_B_CONDITIONAL:
 			if (evaluate_condition(condition, cpu.condition_n, cpu.condition_z, cpu.condition_c, cpu.condition_v)) {
@@ -378,32 +402,103 @@ void ArmInstruction::run(ArmCPU& cpu) {
 			}
 			break;
 		case OPCODE_CMP_REGISTER:
-			cpu.condition_n = (int32_t) (cpu.registers[source] - cpu.registers[source2]) < 0;
-			cpu.condition_z = cpu.registers[source] == cpu.registers[source2];
-			cpu.condition_c = add_carry(cpu.registers[source], ~cpu.registers[source2], 1);
-			cpu.condition_v = add_overflow(cpu.registers[source], ~cpu.registers[source2], 1);
+			add_set_flags(cpu.registers[source], ~cpu.registers[source2], 1, cpu);
 			break;
 		case OPCODE_SUB_REGISTER:
-			cpu.registers[destination] = cpu.registers[source] - cpu.registers[source2];
+			cpu.registers[destination] = add_set_flags(cpu.registers[source], ~cpu.registers[source2], 1, cpu);
 			break;
 		case OPCODE_ADC_REGISTER:
-		{
-			uint32_t result = cpu.registers[source] + cpu.registers[source2] + cpu.condition_c;
-			bool carry = add_carry(cpu.registers[source], cpu.registers[source2], cpu.condition_c);
-			bool overflow = add_overflow(cpu.registers[source], cpu.registers[source2], cpu.condition_c);
-			cpu.registers[destination] = result;
-			cpu.condition_c = carry;
-			cpu.condition_v = overflow;
-			cpu.condition_n = result >> 31;
-			cpu.condition_z = result == 0;
+			cpu.registers[destination] = add_set_flags(cpu.registers[source], cpu.registers[source2], cpu.condition_c, cpu);
 			break;
-		}
 		case OPCODE_UXTB:
 			cpu.registers[destination] = cpu.registers[source];
 			break;
 		case OPCODE_STRB_IMMEDIATE:
 			cpu.memory[cpu.registers[source2] + immediate] = cpu.registers[source];
 			break;
+		case OPCODE_AND_REGISTER:
+			cpu.registers[destination] = cpu.registers[source] & cpu.registers[source2];
+			if (set_flags) {
+				cpu.condition_n = cpu.registers[destination] >> 31;
+				cpu.condition_z = cpu.registers[destination] == 0;
+			}
+			break;
+		case OPCODE_STM:
+		{
+			uint32_t address = cpu.registers[source];
+			for (int i = 0; i < 15; i++) {
+				if (immediate & (1 << i)) {
+					cpu.set(address, cpu.registers[i]);
+					address += 4;
+				}
+			}
+			cpu.registers[source] = address;
+			break;
+		}
+		case OPCODE_STR_REGISTER:
+			cpu.set(cpu.registers[source] + cpu.registers[source2], cpu.registers[destination]);
+			break;
+		case OPCODE_LDM:
+		{
+			uint32_t address = cpu.registers[source];
+			for (int i = 0; i < 15; i++) {
+				if (immediate & (1 << i)) {
+					cpu.registers[i] = cpu.get(address);
+					address += 4;
+				}
+			}
+			if ((immediate & (1 << source)) == 0) {
+				cpu.registers[source] = address;
+			}
+			break;
+		}
+		case OPCODE_TST_REGISTER:
+		{
+			uint32_t result = cpu.registers[source] & cpu.registers[source2];
+			cpu.condition_n = result >> 31;
+			cpu.condition_z = result == 0;
+			break;
+		}
+		case OPCODE_BLX_REGISTER:
+			cpu.registers[14] = pc | 1;
+			next_pc = cpu.registers[source];
+			break;
+		case OPCODE_RSB_IMMEDIATE:
+			cpu.registers[destination] = add_set_flags(~cpu.registers[source], immediate, 1, cpu);
+			break;
+		case OPCODE_LDRSH_REGISTER:
+			cpu.registers[destination] = cpu.get(cpu.registers[source] + cpu.registers[source2]) & 0xFFFF;
+			break;
+		case OPCODE_SUB_IMMEDIATE:
+			cpu.registers[destination] = add_set_flags(cpu.registers[source], ~immediate, 1, cpu);
+			break;
+		case OPCODE_LSL_REGISTER:
+			if (cpu.registers[source2] >= 32) {
+				cpu.registers[destination] = 0;
+			} else {
+				cpu.registers[destination] = cpu.registers[source] << cpu.registers[source2];
+			}
+			break;
+		case OPCODE_STRH_IMMEDIATE:
+		{
+			uint32_t address = cpu.registers[source2] + immediate;
+			cpu.memory[address] = cpu.registers[source] & 0xFF;
+			cpu.memory[address + 1] = (cpu.registers[source] >> 8) & 0xFF;
+			break;
+		}
+		case OPCODE_LDRH_IMMEDIATE:
+			cpu.registers[destination] = cpu.get(cpu.registers[source] + immediate) & 0xFFFF;
+			break;
+		case OPCODE_REV:
+		{
+			uint32_t reversed = 0;
+			for (int i = 0; i < 4; i++) {
+				uint8_t byte = cpu.registers[source] >> (i * 8);
+				reversed |= byte << (24 - i * 8);
+			}
+			cpu.registers[destination] = reversed;
+			break;
+		}
 		default:
 			std::cout << "warning: unimplemented opcode " << opcode << '\n';
 	}
@@ -440,7 +535,17 @@ std::string opcode_names[] = {
 	"SUB_REGISTER",
 	"ADC_REGISTER",
 	"UXTB",
-	"STRB_IMMEDIATE"
+	"STRB_IMMEDIATE",
+	"AND_IMMEDIATE",
+	"STM",
+	"STR_REGISTER",
+	"LDM",
+	"TST_REGISTER",
+	"BLX_REGISTER",
+	"RSB_IMMEDIATE",
+	"LDRSH_REGISTER",
+	"SUB_IMMEDIATE",
+	"LSL_REGISTER",
 };
 
 std::string ArmInstruction::disassemble(void) {

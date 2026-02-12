@@ -33,7 +33,20 @@ enum ArmOpcode {
 	OPCODE_SUB_REGISTER,
 	OPCODE_ADC_REGISTER,
 	OPCODE_UXTB,
-	OPCODE_STRB_IMMEDIATE
+	OPCODE_STRB_IMMEDIATE,
+	OPCODE_AND_REGISTER,
+	OPCODE_STM,
+	OPCODE_STR_REGISTER,
+	OPCODE_LDM,
+	OPCODE_TST_REGISTER,
+	OPCODE_BLX_REGISTER,
+	OPCODE_RSB_IMMEDIATE,
+	OPCODE_LDRSH_REGISTER,
+	OPCODE_SUB_IMMEDIATE,
+	OPCODE_LSL_REGISTER,
+	OPCODE_STRH_IMMEDIATE,
+	OPCODE_LDRH_IMMEDIATE,
+	OPCODE_REV,
 };
 
 enum ArmCondition {
@@ -78,16 +91,17 @@ struct Arm16BitEncoding {
 class ArmInstruction {
 	private:
 	uint16_t word1, word2;
-	ArmOpcode opcode;
 	bool set_flags;
 	int destination, source, source2;
 	uint32_t immediate;
 	ArmCondition condition;
 	int length;
 	public:
+	ArmOpcode opcode;
 	ArmInstruction(uint32_t data);
 	std::string disassemble(void);
 	void run(ArmCPU& cpu);
+	uint32_t add_set_flags(uint32_t, uint32_t, bool, ArmCPU& cpu);
 	int get_length(void);
 };
 

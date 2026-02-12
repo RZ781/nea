@@ -1,37 +1,49 @@
 #include <stdint.h>
-#include <linux/unistd.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
 
 uint32_t syscall(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t n);
 
-int length(const char* string) {
-	int i = 0;
-	while (string[i] != 0)
-		i++;
-	return i;
+void log(int number) {
+	syscall(number, number, number, 6767);
 }
 
-void exit(int code) {
-	syscall(code, 0, 0, 1);
+void _exit(int status) {
+	syscall(status, 0, 0, 1);
 }
 
-void print(const char* string) {
-	syscall(1, (uint32_t) string, length(string), 4);
+int _read(int file, char* ptr, int len) {
+	return syscall(file, (uint32_t) ptr, len, 3);
 }
 
-void print_int(int x) {
-	char string[10];
-	int i = 0;
-	while (x) {
-		string[i] = x % 10 + '0';
-		x /= 10;
-		i++;
-	}
-	string[i] = 0;
-	print(string);
+int _write(int file, char* ptr, int len) {
+	return syscall(file, (uint32_t) ptr, len, 4);
 }
 
-__attribute__((naked))
-void _start() {
-	print_int(67);
-	exit(0);
+int _isatty(int fd) {
+	log(0);
+	return 0;
+}
+
+int _lseek(int fd, int offset, int whence) {
+	return syscall(fd, offset, whence, 19);
+}
+
+int _close(int fd) {
+	return syscall(fd, 0, 0, 6);
+}
+
+void* _sbrk(int nbytes) {
+	log(1);
+	return NULL;
+}
+
+int _fstat(int fd, struct stat* buf) {
+	return syscall(fd, (uint32_t) buf, 0, 108);
+}
+
+int main() {
+	fwrite("hello world", 11, 1, stdout);
+	_exit(0);
 }
