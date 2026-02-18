@@ -35,6 +35,8 @@ class MainWindow: public Gtk::Window {
 	// code tab widgets
 	Gtk::Paned code_tab;
 	Gtk::Box compilation_options;
+	Gtk::CheckButton arm_button;
+	Gtk::CheckButton riscv_button;
 	Gtk::CheckButton c_button;
 	Gtk::CheckButton cpp_button;
 	Gtk::CheckButton asm_button;
@@ -80,6 +82,8 @@ class MainWindow: public Gtk::Window {
 
 MainWindow::MainWindow():
 	compilation_options(Gtk::Orientation::VERTICAL),
+	arm_button("Arm"),
+	riscv_button("RISC-V"),
 	c_button("C"),
 	cpp_button("C++"),
 	asm_button("Assembly"),
@@ -104,11 +108,13 @@ MainWindow::MainWindow():
 
 {
 	started = false;
-	cpu = std::make_unique<ArmCPU>();
+	cpu = std::make_unique<ExampleCPU>();
 	// set up code tab
 	notebook.append_page(code_tab, "Code");
 	code_tab.set_start_child(source_code_view);
 	code_tab.set_end_child(compilation_options);
+	compilation_options.append(arm_button);
+	compilation_options.append(riscv_button);
 	compilation_options.append(c_button);
 	compilation_options.append(cpp_button);
 	compilation_options.append(asm_button);
@@ -117,6 +123,7 @@ MainWindow::MainWindow():
 	compilation_options.set_homogeneous();
 	cpp_button.set_group(c_button);
 	asm_button.set_group(c_button);
+	riscv_button.set_group(arm_button);
 	compilation_options.set_margin(50);
 	source_code_view.set_monospace();
 	code_tab.set_position(500);
@@ -184,18 +191,23 @@ void MainWindow::compile(void) {
 	file << source_code;
 	file.close();
 	// generate command
-	std::string command = "riscv32-unknown-linux-musl-gcc -static";
-	if (this->c_button.get_active()) {
+	std::string command;
+	if (riscv_button.get_active()) {
+		command = "riscv32-unknown-linux-musl-gcc";
+	} else {
+		command = "arm-none-eabi-gcc -mcpu=cortex-m0";
+	}
+	if (c_button.get_active()) {
 		command += " -x c";
-	} else if (this->cpp_button.get_active()) {
+	} else if (cpp_button.get_active()) {
 		command += " -x c++";
 	} else {
 		command += " -x assembler-with-cpp";
 	}
+	command += " -static source";
 	if (!this->standard_library_box.get_active()) {
-		command += " -nostdlib -ffreestanding";
+		command += " -nostdlib -ffreestanding -lgcc";
 	}
-	command += " source";
 	// run the command
 	std::string errors;
 	int status;
@@ -209,7 +221,11 @@ void MainWindow::compile(void) {
 		} else {
 			output = "Compilation succeeded with the following warnings:\n";
 		}
-		cpu = std::make_unique<RiscVCPU>();
+		if (riscv_button.get_active()) {
+			cpu = std::make_unique<RiscVCPU>();
+		} else {
+			cpu = std::make_unique<ArmCPU>();
+		}
 	} else {
 		output = "Compilation failed with the following errors:\n";
 	}
@@ -225,7 +241,7 @@ void MainWindow::compile(void) {
 
 void MainWindow::start(void) {
 	if (!started) {
-		Glib::signal_timeout().connect(sigc::mem_fun(*this, &MainWindow::timeout), 1);
+		Glib::signal_timeout().connect(sigc::mem_fun(*this, &MainWindow::timeout), 10);
 		started = true;
 	}
 }
@@ -279,6 +295,8 @@ void MainWindow::step(void) {
 }
 
 bool MainWindow::timeout(void) {
+	for (int i = 0; i < 1000; i++)
+		cpu->step();
 	step();
 	return started;
 }

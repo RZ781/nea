@@ -1,3 +1,4 @@
+#include <headers.h>
 #include <map>
 #include <iostream>
 #include <string>
@@ -10,25 +11,42 @@
 ArmCPU::ArmCPU(void):
 	running(true)
 {
+	// generate flat binary
+	Glib::spawn_command_line_sync("arm-none-eabi-objcopy -O binary a.out binary", nullptr, nullptr, nullptr);
+	// find entry point
+	std::string output;
+	Glib::spawn_command_line_sync("arm-none-eabi-readelf -h a.out", &output, nullptr, nullptr);
+	std::stringstream ss;
+	ss << std::hex << output.substr(output.find("Entry point address:") + 21);;
+	uint32_t entry_point;
+	ss >> entry_point;
+	// load file
 	std::ifstream binary("binary");
 	binary.read((char*) memory+0x8000, sizeof(memory));
-	registers[15] = 0x80d1;
+	std::cout << '"' << output << "'\n";
+	registers[15] = entry_point | 1;
 	registers[13] = (sizeof(memory) - 1) & ~3;
+}
+
+uint8_t ArmCPU::get_byte(uint32_t address) {
+	return memory[address & (sizeof(memory) - 1)];
+}
+
+void ArmCPU::set_byte(uint32_t address, uint8_t value) {
+	memory[address & (sizeof(memory) - 1)] = value;
 }
 
 uint32_t ArmCPU::get(uint32_t address) {
 	uint32_t value = 0;
-	uint32_t address_mask = sizeof(memory) - 1;
 	for (int i = 0; i < 4; i++) {
-		value |= memory[(address + i) & address_mask] << (i * 8);
+		value |= get_byte(address + i) << (i * 8);
 	}
 	return value;
 }
 
 void ArmCPU::set(uint32_t address, uint32_t value) {
-	uint32_t address_mask = sizeof(memory) - 1;
 	for (int i = 0; i < 4; i++) {
-		memory[(address + i) & address_mask] = (value >> (i * 8)) & 0xFF;
+		set_byte(address + i, (value >> (i * 8)) & 0xFF);
 	}
 }
 
@@ -266,6 +284,22 @@ uint32_t ArmInstruction::add_set_flags(uint32_t x, uint32_t y, bool carry, ArmCP
 	return result;
 }
 
+void ArmInstruction::syscall(ArmCPU& cpu) {
+	uint32_t arg1 = cpu.registers[0];
+	uint32_t arg2 = cpu.registers[1];
+	uint32_t arg3 = cpu.registers[2];
+	switch (cpu.registers[7]) {
+		case 1: // exit
+			cpu.running = false;
+			break;
+		case 4: // write
+			cpu.registers[0] = write(arg1, cpu.memory + arg2, arg3);
+			break;
+		default:
+			std::cout << "warning: unknown system call " << cpu.registers[7] << '\n';
+	}
+}
+
 void ArmInstruction::run(ArmCPU& cpu) {
 	// todo: fix writing to pc
 	uint32_t next_pc = cpu.registers[15] + length;
@@ -286,16 +320,7 @@ void ArmInstruction::run(ArmCPU& cpu) {
 			cpu.registers[destination] = cpu.get((pc & ~3) + immediate);
 			break;
 		case OPCODE_SVC:
-			std::cout << "system call " << immediate << '\n';
-			std::cout << "syscall number: " << cpu.registers[7] << '\n';
-			std::cout << "args: ";
-			for (int i = 0; i < 5; i++) {
-				std::cout << cpu.registers[i] << ' ';
-			}
-			std::cout << '\n';
-			if (cpu.registers[7] == 1) { // exit
-				cpu.running = false;
-			}
+			syscall(cpu);
 			break;
 		case OPCODE_ADD_REGISTER:
 			cpu.registers[destination] = add_set_flags(cpu.registers[source], cpu.registers[source2], 0, cpu);
@@ -414,7 +439,7 @@ void ArmInstruction::run(ArmCPU& cpu) {
 			cpu.registers[destination] = cpu.registers[source];
 			break;
 		case OPCODE_STRB_IMMEDIATE:
-			cpu.memory[cpu.registers[source2] + immediate] = cpu.registers[source];
+			cpu.set_byte(cpu.registers[source2] + immediate, cpu.registers[source]);
 			break;
 		case OPCODE_AND_REGISTER:
 			cpu.registers[destination] = cpu.registers[source] & cpu.registers[source2];
@@ -482,8 +507,8 @@ void ArmInstruction::run(ArmCPU& cpu) {
 		case OPCODE_STRH_IMMEDIATE:
 		{
 			uint32_t address = cpu.registers[source2] + immediate;
-			cpu.memory[address] = cpu.registers[source] & 0xFF;
-			cpu.memory[address + 1] = (cpu.registers[source] >> 8) & 0xFF;
+			cpu.set_byte(address, cpu.registers[source] & 0xFF);
+			cpu.set_byte(address + 1, (cpu.registers[source] >> 8) & 0xFF);
 			break;
 		}
 		case OPCODE_LDRH_IMMEDIATE:

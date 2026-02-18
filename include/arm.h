@@ -102,6 +102,7 @@ class ArmInstruction {
 	std::string disassemble(void);
 	void run(ArmCPU& cpu);
 	uint32_t add_set_flags(uint32_t, uint32_t, bool, ArmCPU& cpu);
+	void syscall(ArmCPU& cpu);
 	int get_length(void);
 };
 
