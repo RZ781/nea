@@ -281,16 +281,9 @@ void MainWindow::step(void) {
 		i++;
 	}
 	// recalculate variable values
-	for (Gtk::Label& label: variable_values) {
-		label.unparent();
-	}
-	variable_values.clear();
-	i = 0;
-	for (Variable variable: variables) {
-		variable_values.push_back(Gtk::Label(std::to_string(variable.get_value(*cpu))));
-		variable_values[i].set_hexpand();
-		variables_grid.attach(variable_values[i], 2, i);
-		i++;
+	for (int i =0; i<variables.size(); i++) {
+		std::string value = std::to_string(variables[i].get_value(*cpu));
+		variable_values[i].set_label(value);
 	}
 }
 
