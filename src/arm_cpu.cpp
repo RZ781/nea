@@ -8,11 +8,12 @@
 #include "cpu.h"
 #include "arm.h"
 
-ArmCPU::ArmCPU(void):
+ArmCPU::ArmCPU(std::string filename):
 	running(true)
 {
 	// generate flat binary
-	Glib::spawn_command_line_sync("arm-none-eabi-objcopy -O binary a.out binary", nullptr, nullptr, nullptr);
+	std::string command = std::format("arm-none-eabi-objcopy -O binary {} binary", filename);
+	Glib::spawn_command_line_sync(command, nullptr, nullptr, nullptr);
 	// find entry point
 	std::string output;
 	Glib::spawn_command_line_sync("arm-none-eabi-readelf -h a.out", &output, nullptr, nullptr);
@@ -23,7 +24,6 @@ ArmCPU::ArmCPU(void):
 	// load file
 	std::ifstream binary("binary");
 	binary.read((char*) memory+0x8000, sizeof(memory));
-	std::cout << '"' << output << "'\n";
 	registers[15] = entry_point | 1;
 	registers[13] = (sizeof(memory) - 1) & ~3;
 }
@@ -149,6 +149,8 @@ Arm16BitEncoding encoding_table[] = {
 	{0x8000, 0xF800, OPCODE_STRH_IMMEDIATE, {.immediate={6, 0x1F, 1}, .source={0, 0x7}, .source2={3, 0x7}}},
 	{0x8800, 0xF800, OPCODE_LDRH_IMMEDIATE, {.immediate={6, 0x1F, 1}, .destination={0, 0x7}, .source={3, 0x7}}},
 	{0xBA00, 0xFFC0, OPCODE_REV, {.destination={0, 0x7}, .source={3, 0x7}}},
+	{0x5800, 0xFE00, OPCODE_LDR_REGISTER, {.destination={0, 0x7}, .source={3, 0x7}, .source2={6, 0x7}}},
+	{0x5C00, 0xFE00, OPCODE_LDRB_REGISTER, {.destination={0, 0x7}, .source={3, 0x7}, .source2={6, 0x7}}},
 };
 
 uint32_t expand_immediate(uint16_t immediate, bool* carry) {
@@ -295,8 +297,12 @@ void ArmInstruction::syscall(ArmCPU& cpu) {
 		case 4: // write
 			cpu.registers[0] = write(arg1, cpu.memory + arg2, arg3);
 			break;
+		case 6: // close
+			cpu.registers[0] = 0;
+			break;
 		default:
 			std::cout << "warning: unknown system call " << cpu.registers[7] << '\n';
+			std::cout << arg1 << ' ' << arg2 << ' ' << arg3 << '\n';
 	}
 }
 
@@ -524,6 +530,12 @@ void ArmInstruction::run(ArmCPU& cpu) {
 			cpu.registers[destination] = reversed;
 			break;
 		}
+		case OPCODE_LDR_REGISTER:
+			cpu.registers[destination] = cpu.get(cpu.registers[source] + cpu.registers[source2]);
+			break;
+		case OPCODE_LDRB_REGISTER:
+			cpu.registers[destination] = cpu.get(cpu.registers[source] + cpu.registers[source2]) & 0xFF;
+			break;
 		default:
 			std::cout << "warning: unimplemented opcode " << opcode << '\n';
 	}
@@ -571,6 +583,11 @@ std::string opcode_names[] = {
 	"LDRSH_REGISTER",
 	"SUB_IMMEDIATE",
 	"LSL_REGISTER",
+	"STRH_IMMEDIATE",
+	"LDRH_IMMEDIATE",
+	"REV",
+	"LDR_REGISTER",
+	"LDRB_REGISTER",
 };
 
 std::string ArmInstruction::disassemble(void) {
@@ -594,7 +611,6 @@ std::string ArmInstruction::disassemble(void) {
 		case OPCODE_BX:
 			return std::format("bx r{}", source);
 		case OPCODE_PUSH:
-			// TODO
 			return std::format("push registers {}", immediate);
 		case OPCODE_SUB_SP_IMMEDIATE:
 			return std::format("sub sp, #{}", immediate);
@@ -611,27 +627,7 @@ std::string ArmInstruction::disassemble(void) {
 		case OPCODE_CMP_IMMEDIATE:
 			return std::format("cmp r{}, #{}", source, immediate);
 		case OPCODE_B_CONDITIONAL:
-			// TODO
 			return std::format("b.{} <pc+{}>", (int) condition, immediate);
-/*
-		case OPCODE_MOV_REGISTER:
-			return std::format("mov ");
-		case OPCODE_POP:
-			return "";
-		case OPCODE_ASR_IMMEDIATE:
-			return "";
-		case OPCODE_MOVT:
-			return "";
-		case OPCODE_CBZ:
-			return "";
-		case OPCODE_ORR_REGISTER:
-			return "";
-		case OPCODE_LSR_IMMEDIATE:
-			return "";
-		case OPCODE_CMP_REGISTER:
-			return "";
-		case OPCODE_SUB_REGISTER:
-			return "";*/
 	}
 	return std::format("{} r{} r{} r{} 0x{:X}", opcode_names[(int) opcode], destination, source, source2, immediate);
 }

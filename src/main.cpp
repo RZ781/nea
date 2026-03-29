@@ -4,14 +4,28 @@
 struct Variable {
 	std::string name;
 	bool memory;
-	uint32_t address;
 	std::string location;
-	int get_value(CPU& cpu) {
+	std::string get_value(CPU& cpu) {
 		if (memory) {
-			return cpu.get(address);
+			uint32_t address;
+			bool valid_address = true;
+			try {
+				address = std::stoul(location, nullptr, 0);
+			} catch (std::exception& e) {
+				valid_address = false;
+			}
+			if (valid_address) {
+				return std::to_string(cpu.get(address));
+			} else {
+				return "Invalid address";
+			}
 		} else {
 			std::map<std::string, int> registers = cpu.get_registers();
-			return registers[location];
+			if (registers.count(location) > 0) {
+				return std::to_string(registers[location]);
+			} else {
+				return "Invalid register";
+			}
 		}
 	}
 };
@@ -23,6 +37,8 @@ class MainWindow: public Gtk::Window {
 	std::unique_ptr<CPU> cpu;
 	bool started;
 	void compile(void);
+	void load(void);
+	void file_loaded(const Glib::RefPtr<Gio::AsyncResult>& result);
 	void start(void);
 	void stop(void);
 	void step(void);
@@ -42,7 +58,9 @@ class MainWindow: public Gtk::Window {
 	Gtk::CheckButton asm_button;
 	Gtk::CheckButton standard_library_box;
 	Gtk::Button compile_button;
-	Glib::RefPtr<Gtk::AlertDialog> compile_alert;
+	Gtk::Button load_button;
+	Glib::RefPtr<Gtk::AlertDialog> alert;
+	Glib::RefPtr<Gtk::FileDialog> file_dialogue;
 	Gtk::TextView source_code_view;
 	// virtual machine tab widgets
 	Gtk::Box vm_tab;
@@ -89,6 +107,7 @@ MainWindow::MainWindow():
 	asm_button("Assembly"),
 	standard_library_box("Include standard library"),
 	compile_button("Compile"),
+	load_button("Load Executable"),
 	registers_frame("Registers"),
 	vm_buttons(Gtk::Orientation::VERTICAL),
 	start_button("Start"),
@@ -120,6 +139,7 @@ MainWindow::MainWindow():
 	compilation_options.append(asm_button);
 	compilation_options.append(standard_library_box);
 	compilation_options.append(compile_button);
+	compilation_options.append(load_button);
 	compilation_options.set_homogeneous();
 	cpp_button.set_group(c_button);
 	asm_button.set_group(c_button);
@@ -128,6 +148,7 @@ MainWindow::MainWindow():
 	source_code_view.set_monospace();
 	code_tab.set_position(500);
 	compile_button.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::compile));
+	load_button.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::load));
 	// set up vm tab
 	notebook.append_page(vm_tab, "Virtual Machine");
 	vm_tab.append(registers_frame);
@@ -222,9 +243,9 @@ void MainWindow::compile(void) {
 			output = "Compilation succeeded with the following warnings:\n";
 		}
 		if (riscv_button.get_active()) {
-			cpu = std::make_unique<RiscVCPU>();
+			cpu = std::make_unique<RiscVCPU>("./a.out");
 		} else {
-			cpu = std::make_unique<ArmCPU>();
+			cpu = std::make_unique<ArmCPU>("./a.out");
 		}
 	} else {
 		output = "Compilation failed with the following errors:\n";
@@ -234,9 +255,31 @@ void MainWindow::compile(void) {
 		errors += "\n(truncated to 1000 characters)";
 	}
 	output += errors;
-	compile_alert = Gtk::AlertDialog::create("Compilation finished");
-	compile_alert->set_message(output);
-	compile_alert->show();
+	alert = Gtk::AlertDialog::create("Compilation finished");
+	alert->set_message(output);
+	alert->show();
+}
+
+void MainWindow::load(void) {
+	file_dialogue = Gtk::FileDialog::create();
+	file_dialogue->open(*this, sigc::mem_fun(*this, &MainWindow::file_loaded));
+}
+
+void MainWindow::file_loaded(const Glib::RefPtr<Gio::AsyncResult>& result) {
+	Glib::RefPtr<Gio::File> file;
+	try {
+		file = file_dialogue->open_finish(result);
+	} catch (std::exception& e) {
+		file = NULL;
+	}
+	if (file) {
+		std::string filename = file->get_path();
+		if (riscv_button.get_active()) {
+			cpu = std::make_unique<RiscVCPU>(filename);
+		} else {
+			cpu = std::make_unique<ArmCPU>(filename);
+		}
+	}
 }
 
 void MainWindow::start(void) {
@@ -256,7 +299,7 @@ void MainWindow::step(void) {
 	int pc = registers["pc"];
 	std::string code;
 	std::vector<std::string> lines = cpu->disassemble(pc - 4*10, pc + 4*10);
-	for (int i = 0; i < lines.size(); i++) {
+	for (size_t i = 0; i < lines.size(); i++) {
 		code += lines[i];
 		code += "\n";
 	}
@@ -281,15 +324,16 @@ void MainWindow::step(void) {
 		i++;
 	}
 	// recalculate variable values
-	for (int i =0; i<variables.size(); i++) {
-		std::string value = std::to_string(variables[i].get_value(*cpu));
+	for (size_t i =0; i < variables.size(); i++) {
+		std::string value = variables[i].get_value(*cpu);
 		variable_values[i].set_label(value);
 	}
 }
 
 bool MainWindow::timeout(void) {
-	for (int i = 0; i < 1000; i++)
+	for (int i = 0; i < 1000; i++) {
 		cpu->step();
+	}
 	step();
 	return started;
 }
@@ -299,26 +343,33 @@ void MainWindow::add_variable_clicked(void) {
 }
 
 void MainWindow::add_variable_confirmed(int result) {
-	add_variable_dialogue.hide();
 	if (result != Gtk::ResponseType::OK) {
+		add_variable_dialogue.hide();
 		return;
 	}
+	if (add_name_entry.get_text() == "") {
+		alert = Gtk::AlertDialog::create();
+		alert->set_message("No variable name provided.");
+		alert->show();
+		return;
+	}
+	if (location_entry.get_text() == "") {
+		alert = Gtk::AlertDialog::create();
+		alert->set_message("No location provided.");
+		alert->show();
+		return;
+	}
+	add_variable_dialogue.hide();
+	// create variable
 	std::string name = add_name_entry.get_text();
 	std::string location = location_entry.get_text();
 	bool memory = memory_button.get_active();
-	// create variable
-	uint32_t address;
-	try {
-		address = std::stoi(location);
-	} catch (std::exception& e) {
-		address = 0;
-	}
-	Variable variable(name, memory, address, location);
+	Variable variable(name, memory, location);
 	variables.push_back(variable);
 	// create widgets
 	variable_names.push_back(Gtk::Label(name));
 	variable_locations.push_back(Gtk::Label(location));
-	variable_values.push_back(Gtk::Label(std::to_string(variable.get_value(*cpu))));
+	variable_values.push_back(Gtk::Label(variable.get_value(*cpu)));
 	int index = variable_names.size() - 1;
 	variable_names[index].set_hexpand();
 	variable_locations[index].set_hexpand();
@@ -337,7 +388,7 @@ void MainWindow::remove_variable_confirmed(int result) {
 	if (result != Gtk::ResponseType::OK) {
 		return;
 	}
-	for (int i = 0; i < variables.size(); i++) {
+	for (size_t i = 0; i < variables.size(); i++) {
 		variable_names[i].unparent();
 		variable_locations[i].unparent();
 		variable_values[i].unparent();
@@ -346,7 +397,7 @@ void MainWindow::remove_variable_confirmed(int result) {
 	variable_locations.clear();
 	variable_values.clear();
 	std::string name = remove_name_entry.get_text();
-	int i = 0;
+	size_t i = 0;
 	while (i < variables.size()) {
 		if (variables[i].name == name) {
 			variables.erase(variables.begin() + i);
@@ -357,7 +408,7 @@ void MainWindow::remove_variable_confirmed(int result) {
 			variable_locations.push_back(Gtk::Label(variables[i].location));
 			variable_locations[i].set_hexpand();
 			variables_grid.attach(variable_locations[i], 1, i);
-			variable_values.push_back(Gtk::Label(std::to_string(variables[i].get_value(*cpu))));
+			variable_values.push_back(Gtk::Label(variables[i].get_value(*cpu)));
 			variable_values[i].set_hexpand();
 			variables_grid.attach(variable_values[i], 2, i);
 			i++;

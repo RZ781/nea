@@ -7,12 +7,12 @@
 #include <libriscv/util/load_binary_file.hpp>
 #include <libriscv/rv32i_instr.hpp>
 
-RiscVCPU::RiscVCPU(void):
-	guest_data(load_binary_file("./a.out")),
+RiscVCPU::RiscVCPU(std::string filename):
+	guest_data(load_binary_file(filename)),
 	machine(guest_data),
 	running(true)
 {
-	machine.setup_linux({"./a.out"}, {"LC_TYPE=C", "LC_ALL=C", "USER=user"});
+	machine.setup_linux({filename}, {"LC_TYPE=C", "LC_ALL=C", "USER=user"});
 	machine.setup_linux_syscalls();
 }
 

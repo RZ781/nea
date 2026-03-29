@@ -31,7 +31,7 @@ class RiscVCPU: public CPU {
 	riscv::Machine<riscv::RISCV32> machine;
 	bool running;
 	public:
-	RiscVCPU(void);
+	RiscVCPU(std::string filename);
 	void step(void) override;
 	std::map<std::string, int> get_registers(void) override;
 	std::vector<std::string> disassemble(int start, int end) override;
@@ -48,7 +48,7 @@ class ArmCPU: public CPU {
 	uint8_t get_byte(uint32_t address);
 	void set_byte(uint32_t address, uint8_t value);
 	public:
-	ArmCPU(void);
+	ArmCPU(std::string filename);
 	void step(void) override;
 	std::map<std::string, int> get_registers(void) override;
 	std::vector<std::string> disassemble(int start, int end) override;
