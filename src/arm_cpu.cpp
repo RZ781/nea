@@ -153,30 +153,6 @@ Arm16BitEncoding encoding_table[] = {
 	{0x5C00, 0xFE00, OPCODE_LDRB_REGISTER, {.destination={0, 0x7}, .source={3, 0x7}, .source2={6, 0x7}}},
 };
 
-uint32_t expand_immediate(uint16_t immediate, bool* carry) {
-	if ((immediate & 0xC00) == 0) {
-		uint8_t byte = immediate & 0xFF;
-		switch (immediate & 0x300) {
-			case 0x000:
-				return byte;
-			case 0x100:
-				return byte | (byte << 16);
-			case 0x200:
-				return (byte << 8) | (byte << 24);
-			case 0x300:
-				return byte | (byte << 8) | (byte << 16) | (byte << 24);
-		}
-	} else {
-		// cool analysis of the original pseudocode the value is 8 bits and the shift is always greater than 8 so we can erase the first part of the ror
-		uint32_t value = (immediate & 0x7F) | 0x80;
-		uint32_t shift = (immediate & 0xF80) >> 7;
-		value <<= (32 - shift);
-		*carry = value >> 31;
-		return value;
-	}
-	return 0;
-}
-
 ArmInstruction::ArmInstruction(uint32_t value) {
 	word1 = value & 0xFFFF;
 	word2 = value >> 16;
@@ -195,33 +171,6 @@ ArmInstruction::ArmInstruction(uint32_t value) {
 		length = 4;
 		return;
 	}
-/*	if ((word1 & 0xFBF0) == 0xF240 && (word2 & 0x8000) == 0) { // MOV immediate encoding T3
-		opcode = OPCODE_MOV_IMMEDIATE;
-		immediate = (word2 & 0xFF) | ((word2 >> 12) << 8) | (((word1 & 0x400) >> 10) << 11) | ((word1 & 0xF) << 12);
-		destination = (word2 & 0xF00) >> 8;
-		set_flags = false;
-		length = 4;
-		return;
-	}
-	if ((word1 & 0xFBF0) == 0xF2C0 && (word2 & 0x8000) == 0) { // MOVT immediate encoding T1
-		opcode = OPCODE_MOVT;
-		immediate = (word2 & 0xFF) | ((word2 >> 12) << 8) | (((word1 & 0x400) >> 10) << 11) | ((word1 & 0xF) << 12);
-		destination = (word2 & 0xF00) >> 8;
-		length = 4;
-		return;
-	}
-	if ((word1 & 0xFBEF) == 0xF04F && (word2 & 0x8000) == 0) { // MOV immediate encoding T2
-		opcode = OPCODE_MOV_IMMEDIATE;
-		int i = (word1 >> 10) & 1;
-		int imm8 = word2 & 0xFF;
-		int imm3 = (word2 >> 12) & 0x7;
-		bool temp = false;
-		immediate = expand_immediate(imm8 | (imm3 << 8) | (i << 11), &temp);
-		destination = (word2 & 0xF00) >> 8;
-		set_flags = (word1 & 0x10) >> 4;
-		length = 4;
-		return;
-	}*/
 	for (Arm16BitEncoding encoding: encoding_table) {
 		if ((word1 & encoding.pattern_mask) == encoding.pattern) {
 			opcode = encoding.opcode;
