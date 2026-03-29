@@ -16,7 +16,7 @@ ArmCPU::ArmCPU(std::string filename):
 	Glib::spawn_command_line_sync(command, nullptr, nullptr, nullptr);
 	// find entry point
 	std::string output;
-	Glib::spawn_command_line_sync("arm-none-eabi-readelf -h a.out", &output, nullptr, nullptr);
+	Glib::spawn_command_line_sync("arm-none-eabi-readelf -h " + filename, &output, nullptr, nullptr);
 	std::stringstream ss;
 	ss << std::hex << output.substr(output.find("Entry point address:") + 21);;
 	uint32_t entry_point;
