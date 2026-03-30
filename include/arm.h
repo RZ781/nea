@@ -3,6 +3,7 @@
 
 #include "cpu.h"
 
+// list of arm opcodes
 enum ArmOpcode {
 	OPCODE_UNKNOWN,
 	OPCODE_MOV_IMMEDIATE,
@@ -51,6 +52,7 @@ enum ArmOpcode {
 	OPCODE_LDRB_REGISTER,
 };
 
+// list of condition codes in conditional branches
 enum ArmCondition {
 	CONDITION_EQ,
 	CONDITION_NE,
@@ -69,34 +71,53 @@ enum ArmCondition {
 	CONDITION_NONE
 };
 
+// location of an operand within an instruction encoding
 struct OperandLocation {
+	// how many bits to shift right the instruction right before masking
 	int shift_right;
+	// bit mask to extract operand
 	uint16_t mask;
+	// how many bits to shift left after masking
 	int shift_left;
+	// bitwise or in the mask if the high bit is set
 	int high_bit;
 	uint32_t high_bit_mask;
+	// extract the operand from an instruction
 	uint32_t get_operand(uint16_t instruction);
 };
 
+// all of the operands that can be specified for an instruction encoding
 struct Operands {
 	OperandLocation immediate, destination, source, source2, condition;
 	bool set_flags;
 };
 
+// instruction encoding
 struct Arm16BitEncoding {
+	// bits that are set to 1
 	uint16_t pattern;
+	// bit mask to check 
 	uint16_t pattern_mask;
+	// opcode of the encoding
 	ArmOpcode opcode;
+	// operand locations
 	Operands operands;
 };
 
+// instruction
 class ArmInstruction {
 	private:
+	// raw bytes of instruction
 	uint16_t word1, word2;
+	// whether or not to set cpu's condition flags
 	bool set_flags;
+	// source and destination registers
 	int destination, source, source2;
+	// immediate value
 	uint32_t immediate;
+	// condition code for conditional branches
 	ArmCondition condition;
+	// number of bytes the instruction is
 	int length;
 	public:
 	ArmOpcode opcode;

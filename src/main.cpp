@@ -2,12 +2,17 @@
 #include "cpu.h"
 
 struct Variable {
+	// name of the variable
 	std::string name;
+	// whether the variable is in memory or a register
 	bool memory;
+	// memory address or variable name
 	std::string location;
+	// get the value of the variable given a cpu
 	std::string get_value(CPU& cpu) {
 		if (memory) {
 			uint32_t address;
+			// attempt to convert string to an integer
 			bool valid_address = true;
 			try {
 				address = std::stoul(location, nullptr, 0);
@@ -35,18 +40,21 @@ class MainWindow: public Gtk::Window {
 	MainWindow();
 	private:
 	std::unique_ptr<CPU> cpu;
+	// whether or not the user has started the vm
 	bool started;
+	// callback for each button
 	void compile(void);
 	void load(void);
 	void file_loaded(const Glib::RefPtr<Gio::AsyncResult>& result);
 	void start(void);
 	void stop(void);
 	void step(void);
-	bool timeout(void);
 	void add_variable_clicked(void);
 	void add_variable_confirmed(int);
 	void remove_variable_clicked(void);
 	void remove_variable_confirmed(int);
+	// runs while vm is started 100 times per second
+	bool timeout(void);
 	Gtk::Notebook notebook;
 	// code tab widgets
 	Gtk::Paned code_tab;
@@ -128,7 +136,8 @@ MainWindow::MainWindow():
 {
 	started = false;
 	cpu = std::make_unique<ExampleCPU>();
-	// set up code tab
+
+	// set up code tab widgets
 	notebook.append_page(code_tab, "Code");
 	code_tab.set_start_child(source_code_view);
 	code_tab.set_end_child(compilation_options);
@@ -149,6 +158,7 @@ MainWindow::MainWindow():
 	code_tab.set_position(500);
 	compile_button.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::compile));
 	load_button.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::load));
+
 	// set up vm tab
 	notebook.append_page(vm_tab, "Virtual Machine");
 	vm_tab.append(registers_frame);
@@ -168,6 +178,7 @@ MainWindow::MainWindow():
 	start_button.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::start));
 	stop_button.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::stop));
 	step_button.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::step));
+
 	// set up variables tab
 	notebook.append_page(variable_tab, "Variables");
 	variable_tab.set_start_child(variables_grid);
@@ -179,6 +190,7 @@ MainWindow::MainWindow():
 	variable_tab.set_position(500);
 	add_variable_button.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::add_variable_clicked));
 	remove_variable_button.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::remove_variable_clicked));
+
 	// set up add variable popup
 	register_button.set_group(memory_button);
 	add_variable_dialogue.add_button("Cancel", Gtk::ResponseType::CANCEL);
@@ -199,19 +211,21 @@ MainWindow::MainWindow():
 	Gtk::Box* remove_variable_content = remove_variable_dialogue.get_content_area();
 	remove_variable_content->append(remove_name_label);
 	remove_variable_content->append(remove_name_entry);
+
 	// set up window
 	set_title("Virtual machine");
 	set_default_size(800, 600);
 	set_child(notebook);
 }
 
+// run when compile button is pressed
 void MainWindow::compile(void) {
 	// save code to file
 	std::string source_code = this->source_code_view.get_buffer()->get_text();
 	std::ofstream file("source");
 	file << source_code;
 	file.close();
-	// generate command
+	// generate compilation command
 	std::string command;
 	if (riscv_button.get_active()) {
 		command = "riscv32-unknown-linux-musl-gcc";
@@ -229,7 +243,7 @@ void MainWindow::compile(void) {
 	if (!this->standard_library_box.get_active()) {
 		command += " -nostdlib -ffreestanding -lgcc";
 	}
-	// run the command
+	// run the command and get output
 	std::string errors;
 	int status;
 	Glib::spawn_command_line_sync(command, nullptr, &errors, &status);
@@ -242,6 +256,7 @@ void MainWindow::compile(void) {
 		} else {
 			output = "Compilation succeeded with the following warnings:\n";
 		}
+		// load the cpu if compilation was successful
 		if (riscv_button.get_active()) {
 			cpu = std::make_unique<RiscVCPU>("./a.out");
 		} else {
@@ -260,12 +275,17 @@ void MainWindow::compile(void) {
 	alert->show();
 }
 
+// run when load button is pressed
 void MainWindow::load(void) {
+	// create file selection dialogue
 	file_dialogue = Gtk::FileDialog::create();
+	// attach callback to dialogue
 	file_dialogue->open(*this, sigc::mem_fun(*this, &MainWindow::file_loaded));
 }
 
+// run when file is chosen
 void MainWindow::file_loaded(const Glib::RefPtr<Gio::AsyncResult>& result) {
+	// attempt to get file, null if cancelled
 	Glib::RefPtr<Gio::File> file;
 	try {
 		file = file_dialogue->open_finish(result);
@@ -273,6 +293,7 @@ void MainWindow::file_loaded(const Glib::RefPtr<Gio::AsyncResult>& result) {
 		file = NULL;
 	}
 	if (file) {
+		// load cpu if file selector was not cancelled
 		std::string filename = file->get_path();
 		if (riscv_button.get_active()) {
 			cpu = std::make_unique<RiscVCPU>(filename);
@@ -282,19 +303,25 @@ void MainWindow::file_loaded(const Glib::RefPtr<Gio::AsyncResult>& result) {
 	}
 }
 
+// run when start button is pressed
 void MainWindow::start(void) {
 	if (!started) {
+		// create timeout to run 100 times per second
 		Glib::signal_timeout().connect(sigc::mem_fun(*this, &MainWindow::timeout), 10);
 		started = true;
 	}
 }
 
+// run when stop button is pressed
 void MainWindow::stop(void) {
 	started = false;
 }
 
+// run when step button is pressed
 void MainWindow::step(void) {
+	// run one instruction
 	cpu->step();
+	// redraw disassembly
 	std::map<std::string, int> registers = cpu->get_registers();
 	int pc = registers["pc"];
 	std::string code;
@@ -304,7 +331,7 @@ void MainWindow::step(void) {
 		code += "\n";
 	}
 	vm_code.get_buffer()->set_text(code);
-	// redraw registers
+	// delete old register widgets
 	for (Gtk::Label& label: register_names) {
 		label.unparent();
 	}
@@ -313,6 +340,7 @@ void MainWindow::step(void) {
 	}
 	register_names.clear();
 	register_values.clear();
+	// create new register widgets
 	int i = 0;
 	for (std::pair<std::string, int> r: registers) {
 		register_names.push_back(Gtk::Label(r.first));
@@ -323,44 +351,53 @@ void MainWindow::step(void) {
 		this->registers.attach(register_values[i], 1, i);
 		i++;
 	}
-	// recalculate variable values
+	// update variable values
 	for (size_t i =0; i < variables.size(); i++) {
 		std::string value = variables[i].get_value(*cpu);
 		variable_values[i].set_label(value);
 	}
 }
 
+// run 100 times per second
 bool MainWindow::timeout(void) {
+	// run 1000 instructions without updating ui
 	for (int i = 0; i < 1000; i++) {
 		cpu->step();
 	}
+	// run an instruction and update ui
 	step();
 	return started;
 }
 
+// run when add variable button is clicked
 void MainWindow::add_variable_clicked(void) {
 	add_variable_dialogue.show();
 }
 
+// run when add variable dialogue is confirmed
 void MainWindow::add_variable_confirmed(int result) {
+	// do nothing if cancelled
 	if (result != Gtk::ResponseType::OK) {
 		add_variable_dialogue.hide();
 		return;
 	}
+	// check if a name was entered
 	if (add_name_entry.get_text() == "") {
 		alert = Gtk::AlertDialog::create();
 		alert->set_message("No variable name provided.");
 		alert->show();
 		return;
 	}
+	// check if a location was entered
 	if (location_entry.get_text() == "") {
 		alert = Gtk::AlertDialog::create();
 		alert->set_message("No location provided.");
 		alert->show();
 		return;
 	}
+	// close dialogue
 	add_variable_dialogue.hide();
-	// create variable
+	// create variable and add to the list
 	std::string name = add_name_entry.get_text();
 	std::string location = location_entry.get_text();
 	bool memory = memory_button.get_active();
@@ -379,15 +416,19 @@ void MainWindow::add_variable_confirmed(int result) {
 	variables_grid.attach(variable_values[index], 2, index);
 }
 
+// run when remove variable button is clicked
 void MainWindow::remove_variable_clicked(void) {
 	remove_variable_dialogue.show();
 }
 
+// run when remove variable dialogue is confirmed
 void MainWindow::remove_variable_confirmed(int result) {
+	// do nothing if cancelled
 	remove_variable_dialogue.hide();
 	if (result != Gtk::ResponseType::OK) {
 		return;
 	}
+	// remove old variable widgets
 	for (size_t i = 0; i < variables.size(); i++) {
 		variable_names[i].unparent();
 		variable_locations[i].unparent();
@@ -396,12 +437,15 @@ void MainWindow::remove_variable_confirmed(int result) {
 	variable_names.clear();
 	variable_locations.clear();
 	variable_values.clear();
+	// loop through each variable
 	std::string name = remove_name_entry.get_text();
 	size_t i = 0;
 	while (i < variables.size()) {
 		if (variables[i].name == name) {
+			// delete variable from list if it has the same name
 			variables.erase(variables.begin() + i);
 		} else {
+			// recreate widgets for this variable
 			variable_names.push_back(Gtk::Label(variables[i].name));
 			variable_names[i].set_hexpand();
 			variables_grid.attach(variable_names[i], 0, i);

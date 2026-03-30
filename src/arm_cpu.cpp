@@ -21,21 +21,26 @@ ArmCPU::ArmCPU(std::string filename):
 	ss << std::hex << output.substr(output.find("Entry point address:") + 21);;
 	uint32_t entry_point;
 	ss >> entry_point;
-	// load file
+	// load file into memory
 	std::ifstream binary("binary");
 	binary.read((char*) memory+0x8000, sizeof(memory));
+	// initialise program counter to entry point
 	registers[15] = entry_point | 1;
+	// initialise stack pointer to just before end of memory, since stack grows downwards
 	registers[13] = (sizeof(memory) - 1) & ~3;
 }
 
+// read one byte from memory with bounds checking
 uint8_t ArmCPU::get_byte(uint32_t address) {
 	return memory[address & (sizeof(memory) - 1)];
 }
 
+// write one byte to memory with bounds checking
 void ArmCPU::set_byte(uint32_t address, uint8_t value) {
 	memory[address & (sizeof(memory) - 1)] = value;
 }
 
+// read 32-bit value from memory
 uint32_t ArmCPU::get(uint32_t address) {
 	uint32_t value = 0;
 	for (int i = 0; i < 4; i++) {
@@ -44,31 +49,39 @@ uint32_t ArmCPU::get(uint32_t address) {
 	return value;
 }
 
+// write 32-bit value to memory
 void ArmCPU::set(uint32_t address, uint32_t value) {
 	for (int i = 0; i < 4; i++) {
 		set_byte(address + i, (value >> (i * 8)) & 0xFF);
 	}
 }
 
+// run one instruction
 void ArmCPU::step(void) {
 	if (!running)
 		return;
+	// fetch instruction from memory
 	uint32_t pc = registers[15];
 	if ((pc & 1) == 0) {
 		std::cout << "error: arm mode not supported\n";
 		return;
 	}
+	// instruction is decoded by constructor
 	ArmInstruction instruction(get(pc & ~1));
+	// run instruction
 	instruction.run(*this);
 }
 
+// get map of registers
 std::map<std::string, int> ArmCPU::get_registers(void) {
 	std::map<std::string, int> output;
+	// add special purpose registers (pc, condition flags)
 	output["pc"] = registers[15];
 	output["APSR.N"] = condition_n;
 	output["APSR.Z"] = condition_z;
 	output["APSR.C"] = condition_c;
 	output["APSR.V"] = condition_v;
+	// add general purpose registers r0-r14
 	for (int i = 0; i < 15; i++) {
 		std::string name = "r";
 		name += std::to_string(i);
@@ -77,11 +90,15 @@ std::map<std::string, int> ArmCPU::get_registers(void) {
 	return output;
 }
 
+// disassemble a memory range
 std::vector<std::string> ArmCPU::disassemble(int start, int end) {
 	std::vector<std::string> output;
+	// align address to 2 bytes
 	int address = start & ~1;
 	while (address < end) {
+		// decode instruction with constructor
 		ArmInstruction instruction(get(address));
+		// disassemble instruction and format in its address
 		std::string string = std::format(" {} 0x{:X}: {}", address == (registers[15] & ~1) ? '>' : ' ', address, instruction.disassemble());
 		output.push_back(string);
 		address += instruction.get_length();
@@ -89,6 +106,7 @@ std::vector<std::string> ArmCPU::disassemble(int start, int end) {
 	return output;
 }
 
+// extract operand from an instruction
 uint32_t OperandLocation::get_operand(uint16_t instruction) {
 	uint32_t value = instruction >> shift_right;
 	value &= mask;
@@ -101,6 +119,7 @@ uint32_t OperandLocation::get_operand(uint16_t instruction) {
 	return value;
 }
 
+// list of instruction encodings
 Arm16BitEncoding encoding_table[] = {
 	{0x2000, 0xF800, OPCODE_MOV_IMMEDIATE, {.immediate={0, 0xFF}, .destination={8, 0x7}, .set_flags=true}},
 	{0x4800, 0xF800, OPCODE_LDR_LITERAL, {.immediate={0, 0xFF, 2}, .destination={8, 0x7}}},
@@ -153,9 +172,12 @@ Arm16BitEncoding encoding_table[] = {
 	{0x5C00, 0xFE00, OPCODE_LDRB_REGISTER, {.destination={0, 0x7}, .source={3, 0x7}, .source2={6, 0x7}}},
 };
 
+// instruction constructor which decodes instructions
 ArmInstruction::ArmInstruction(uint32_t value) {
+	// arm uses little endian, so least significant bits come first
 	word1 = value & 0xFFFF;
 	word2 = value >> 16;
+	// BL (branch and link) has a 32-bit encoding, which cannot be decoded using the 16-bit encoding table
 	if ((word1 & 0xF800) == 0xF000 && (word2 & 0xD000) == 0xD000) { // BL immediate encoding T1
 		opcode = OPCODE_BL_IMMEDIATE;
 		immediate = (word2 & 0x7FF) << 1;
@@ -172,19 +194,25 @@ ArmInstruction::ArmInstruction(uint32_t value) {
 		return;
 	}
 	for (Arm16BitEncoding encoding: encoding_table) {
+		// check if this encoding's pattern matches with the instruction
 		if ((word1 & encoding.pattern_mask) == encoding.pattern) {
+			// set opcode
 			opcode = encoding.opcode;
+			// extract each operand
 			immediate = encoding.operands.immediate.get_operand(word1);
 			destination = encoding.operands.destination.get_operand(word1);
 			source = encoding.operands.source.get_operand(word1);
 			source2 = encoding.operands.source2.get_operand(word1);
 			condition = (ArmCondition) encoding.operands.condition.get_operand(word1);
 			set_flags = encoding.operands.set_flags;
+			// length is always 2 bytes since this a 16 bit instruction
 			length = 2;
 			return;
 		}
 	}
+	// no encoding matched
 	opcode = OPCODE_UNKNOWN;
+	// these 3 bit patterns are for 4 byte instructions, otherwise it is 2 byte
 	uint16_t top_5 = word1 >> 11;
 	if (top_5 == 0b11101 || top_5 == 0b11110 || top_5 == 0b11111) {
 		length = 4;
@@ -193,19 +221,24 @@ ArmInstruction::ArmInstruction(uint32_t value) {
 	}
 }
 
+// check if carry flag should be set
 bool add_carry(uint32_t x, uint32_t y, bool carry) {
+	// check for unsigned overflow
 	uint64_t result = (uint64_t) x + (uint64_t) y + carry;
 	return (result >> 32) > 0;
 }
 
+// check if overflow flag should be set
 bool add_overflow(int32_t x, int32_t y, bool carry) {
 	int32_t result = x + y + carry;
 	bool x_sign = x >= 0;
 	bool y_sign = y >= 0;
 	bool result_sign = result >= 0;
+	// check if the inputs have the same sign but the result is different
 	return x_sign == y_sign && x_sign != result_sign;
 }
 
+// evaluate if a conditional instruction should be run given the condition codes
 bool evaluate_condition(ArmCondition condition, bool n, bool z, bool c, bool v) {
 	switch (condition) {
 		case CONDITION_EQ: return z == 1;
@@ -226,8 +259,10 @@ bool evaluate_condition(ArmCondition condition, bool n, bool z, bool c, bool v) 
 	}
 }
 
+// set all 4 flags appropriately for an addition
 uint32_t ArmInstruction::add_set_flags(uint32_t x, uint32_t y, bool carry, ArmCPU& cpu) {
 	uint32_t result = x + y + carry;
+	// top bit of an unsigned number is 1 if the signed number would be negative
 	cpu.condition_n = result >> 31;
 	cpu.condition_z = result == 0;
 	cpu.condition_c = add_carry(x, y, carry);
@@ -235,6 +270,7 @@ uint32_t ArmInstruction::add_set_flags(uint32_t x, uint32_t y, bool carry, ArmCP
 	return result;
 }
 
+// run a system call
 void ArmInstruction::syscall(ArmCPU& cpu) {
 	uint32_t arg1 = cpu.registers[0];
 	uint32_t arg2 = cpu.registers[1];
@@ -255,9 +291,11 @@ void ArmInstruction::syscall(ArmCPU& cpu) {
 	}
 }
 
+// run an instruction
 void ArmInstruction::run(ArmCPU& cpu) {
-	// todo: fix writing to pc
+	// find the next value for the program counter
 	uint32_t next_pc = cpu.registers[15] + length;
+	// get the value that the program counter is read as, which is 4 bytes after the actual address
 	uint32_t pc = (cpu.registers[15] & ~1) + 4;
 	cpu.registers[15] = pc;
 	switch (opcode) {
@@ -265,6 +303,7 @@ void ArmInstruction::run(ArmCPU& cpu) {
 			std::cout << "warning: unknown instruction " << std::hex << word1 << ' ' << word2 << std::dec << "\n";
 			break;
 		case OPCODE_MOV_IMMEDIATE:
+			// set destination to immediate and update flags
 			cpu.registers[destination] = immediate;
 			if (set_flags) {
 				cpu.condition_z = immediate == 0;
@@ -272,34 +311,43 @@ void ArmInstruction::run(ArmCPU& cpu) {
 			}
 			break;
 		case OPCODE_LDR_LITERAL:
+			// set destination to value at pc-relative address
 			cpu.registers[destination] = cpu.get((pc & ~3) + immediate);
 			break;
 		case OPCODE_SVC:
+			// run a system call
 			syscall(cpu);
 			break;
 		case OPCODE_ADD_REGISTER:
+			// set destination to sum of sources, and set flags
 			cpu.registers[destination] = add_set_flags(cpu.registers[source], cpu.registers[source2], 0, cpu);
 			break;
 		case OPCODE_LSL_IMMEDIATE:
+			// set destination to source shifted left by immediate
 			cpu.registers[destination] = cpu.registers[source] << immediate;
 			break;
 		case OPCODE_BL_IMMEDIATE:
+			// jump to pc-relative address and update link register to previous address so it can be returned to
 			cpu.registers[14] = pc | 1;
 			next_pc = pc + ((int32_t) immediate | 1);
 			break;
 		case OPCODE_ADD_IMMEDIATE:
+			// set destination to sum of source and immediate, and set flags
 			cpu.registers[destination] = add_set_flags(cpu.registers[source], immediate, 0, cpu);
 			break;
 		case OPCODE_BX:
+			// jump to register
 			next_pc = cpu.registers[source];
 			break;
 		case OPCODE_PUSH:
 		{
+			// count how many registers are being pushed
 			int n_registers = 0;
 			for (int i = 0; i < 15; i++) {
 				if (immediate & (1 << i))
 					n_registers++;
 			}
+			// push each register to memory
 			uint32_t address = cpu.registers[13] - n_registers * 4;
 			for (int i = 0; i < 15; i++) {
 				if (immediate & (1 << i)) {
@@ -307,51 +355,64 @@ void ArmInstruction::run(ArmCPU& cpu) {
 					address += 4;
 				}
 			}
+			// update stack pointer
 			cpu.registers[13] -= n_registers * 4;
 			break;
 		}
 		case OPCODE_SUB_SP_IMMEDIATE:
+			// subtract stack pointer by immediate
 			cpu.registers[13] -= immediate;
 			break;
 		case OPCODE_ADD_SP_IMMEDIATE:
+			// set destination to stack pointer + immediate
 			cpu.registers[destination] = cpu.registers[13] + immediate;
 			break;
 		case OPCODE_STR_IMMEDIATE:
+			// store source register into address immediate + source2
 			cpu.set(cpu.registers[source2] + immediate, cpu.registers[source]);
 			break;
 		case OPCODE_LDR_IMMEDIATE:
+			// load data at address immediate + source
 			cpu.registers[destination] = cpu.get(cpu.registers[source] + immediate);
 			break;
 		case OPCODE_B:
+			// jump to pc relative address
 			next_pc = pc + ((int32_t) immediate | 1);
 			break;
 		case OPCODE_LDRB_IMMEDIATE:
+			// load one byte at address source + immediate
 			cpu.registers[destination] = cpu.get(cpu.registers[source] + immediate) & 0xFF;
 			break;
 		case OPCODE_CMP_IMMEDIATE:
+			// set flags as if immediate was subtracted from source
 			add_set_flags(cpu.registers[source], ~immediate, 1, cpu);
 			break;
 		case OPCODE_B_CONDITIONAL:
+			// jump to pc relative address if condition is true
 			if (evaluate_condition(condition, cpu.condition_n, cpu.condition_z, cpu.condition_c, cpu.condition_v)) {
 				next_pc = pc + ((int32_t) immediate | 1);
 			}
 			break;
 		case OPCODE_MOV_REGISTER:
+			// set destination to source
 			cpu.registers[destination] = cpu.registers[source];
 			break;
 		case OPCODE_POP:
+			// pop each register r0-r14
 			for (int i = 0; i < 15; i++) {
 				if (immediate & (1 << i)) {
 					cpu.registers[i] = cpu.get(cpu.registers[13]);
 					cpu.registers[13] += 4;
 				}
 			}
+			// if r15 (program counter) is popped, do a jump
 			if (immediate & (1 << 15)) {
 				next_pc = cpu.get(cpu.registers[13]);
 				cpu.registers[13] += 4;
 			}
 			break;
 		case OPCODE_ASR_IMMEDIATE:
+			// set destination to source shifted right by immediate (signed)
 			if (immediate == 0) {
 				cpu.registers[destination] = ((int32_t) cpu.registers[source]) >= 0 ? 0 : -1;
 			} else {
@@ -359,15 +420,18 @@ void ArmInstruction::run(ArmCPU& cpu) {
 			}
 			break;
 		case OPCODE_MOVT:
+			// set the top 16 bits of destination to immediate
 			cpu.registers[destination] &= 0xFFFF;
 			cpu.registers[destination] |= immediate << 16;
 			break;
 		case OPCODE_CBZ:
+			// jump if source is zero
 			if (cpu.registers[source] == 0) {
 				next_pc = pc + ((int32_t) immediate | 1);
 			}
 			break;
 		case OPCODE_ORR_REGISTER:
+			// set destination to sources bitwise ored together, set flags
 			cpu.registers[destination] = cpu.registers[source] | cpu.registers[source2];
 			if (set_flags) {
 				cpu.condition_n = cpu.registers[destination] >> 31;
@@ -375,6 +439,7 @@ void ArmInstruction::run(ArmCPU& cpu) {
 			}
 			break;
 		case OPCODE_LSR_IMMEDIATE:
+			// set destination to source shifted righted by immediate, or just 0 if immediate is 0
 			if (immediate == 0) {
 				cpu.registers[destination] = 0;
 			} else {
@@ -382,21 +447,27 @@ void ArmInstruction::run(ArmCPU& cpu) {
 			}
 			break;
 		case OPCODE_CMP_REGISTER:
+			// set flags as if source2 was subtracted from source1
 			add_set_flags(cpu.registers[source], ~cpu.registers[source2], 1, cpu);
 			break;
 		case OPCODE_SUB_REGISTER:
+			// set destination to source - source2 and set flags
 			cpu.registers[destination] = add_set_flags(cpu.registers[source], ~cpu.registers[source2], 1, cpu);
 			break;
 		case OPCODE_ADC_REGISTER:
+			// set destination to source + source2 + carry flag
 			cpu.registers[destination] = add_set_flags(cpu.registers[source], cpu.registers[source2], cpu.condition_c, cpu);
 			break;
 		case OPCODE_UXTB:
-			cpu.registers[destination] = cpu.registers[source];
+			// set destination to lower byte of source
+			cpu.registers[destination] = cpu.registers[source] & 0xFF;
 			break;
 		case OPCODE_STRB_IMMEDIATE:
+			// store the lower byte of source
 			cpu.set_byte(cpu.registers[source2] + immediate, cpu.registers[source]);
 			break;
 		case OPCODE_AND_REGISTER:
+			// set destination to source & source2 and set flags
 			cpu.registers[destination] = cpu.registers[source] & cpu.registers[source2];
 			if (set_flags) {
 				cpu.condition_n = cpu.registers[destination] >> 31;
@@ -405,6 +476,7 @@ void ArmInstruction::run(ArmCPU& cpu) {
 			break;
 		case OPCODE_STM:
 		{
+			// store registers specified by immediate's bits to memory at address source
 			uint32_t address = cpu.registers[source];
 			for (int i = 0; i < 15; i++) {
 				if (immediate & (1 << i)) {
@@ -416,10 +488,12 @@ void ArmInstruction::run(ArmCPU& cpu) {
 			break;
 		}
 		case OPCODE_STR_REGISTER:
+			// store register in memory
 			cpu.set(cpu.registers[source] + cpu.registers[source2], cpu.registers[destination]);
 			break;
 		case OPCODE_LDM:
 		{
+			// load registers specified by immediate's bits from memory at address source
 			uint32_t address = cpu.registers[source];
 			for (int i = 0; i < 15; i++) {
 				if (immediate & (1 << i)) {
@@ -434,25 +508,31 @@ void ArmInstruction::run(ArmCPU& cpu) {
 		}
 		case OPCODE_TST_REGISTER:
 		{
+			// set flags as if sources were anded together
 			uint32_t result = cpu.registers[source] & cpu.registers[source2];
 			cpu.condition_n = result >> 31;
 			cpu.condition_z = result == 0;
 			break;
 		}
 		case OPCODE_BLX_REGISTER:
+			// jump to register and set previous pc to link register so it can be returned to
 			cpu.registers[14] = pc | 1;
 			next_pc = cpu.registers[source];
 			break;
 		case OPCODE_RSB_IMMEDIATE:
+			// set destination to immediate - source and set flags
 			cpu.registers[destination] = add_set_flags(~cpu.registers[source], immediate, 1, cpu);
 			break;
 		case OPCODE_LDRSH_REGISTER:
+			// load lower two bytes at address source + source2
 			cpu.registers[destination] = cpu.get(cpu.registers[source] + cpu.registers[source2]) & 0xFFFF;
 			break;
 		case OPCODE_SUB_IMMEDIATE:
+			// set destination to source - immediate and set flags
 			cpu.registers[destination] = add_set_flags(cpu.registers[source], ~immediate, 1, cpu);
 			break;
 		case OPCODE_LSL_REGISTER:
+			// set destination to source shifted left by source2
 			if (cpu.registers[source2] >= 32) {
 				cpu.registers[destination] = 0;
 			} else {
@@ -461,16 +541,19 @@ void ArmInstruction::run(ArmCPU& cpu) {
 			break;
 		case OPCODE_STRH_IMMEDIATE:
 		{
+			// store the lower 2 bytes of source
 			uint32_t address = cpu.registers[source2] + immediate;
 			cpu.set_byte(address, cpu.registers[source] & 0xFF);
 			cpu.set_byte(address + 1, (cpu.registers[source] >> 8) & 0xFF);
 			break;
 		}
 		case OPCODE_LDRH_IMMEDIATE:
+			// load 2 bytes at source + immediate
 			cpu.registers[destination] = cpu.get(cpu.registers[source] + immediate) & 0xFFFF;
 			break;
 		case OPCODE_REV:
 		{
+			// set destination to source with bytes reversed
 			uint32_t reversed = 0;
 			for (int i = 0; i < 4; i++) {
 				uint8_t byte = cpu.registers[source] >> (i * 8);
@@ -480,17 +563,21 @@ void ArmInstruction::run(ArmCPU& cpu) {
 			break;
 		}
 		case OPCODE_LDR_REGISTER:
+			// load data at address source + source2
 			cpu.registers[destination] = cpu.get(cpu.registers[source] + cpu.registers[source2]);
 			break;
 		case OPCODE_LDRB_REGISTER:
+			// load one byte at address source + source2
 			cpu.registers[destination] = cpu.get(cpu.registers[source] + cpu.registers[source2]) & 0xFF;
 			break;
 		default:
 			std::cout << "warning: unimplemented opcode " << opcode << '\n';
 	}
+	// update program counter
 	cpu.registers[15] = next_pc;
 }
 
+// list of opcode names for fallback disassembly
 std::string opcode_names[] = {
 	"UNKNOWN",
 	"MOV_IMMEDIATE",
@@ -539,7 +626,9 @@ std::string opcode_names[] = {
 	"LDRB_REGISTER",
 };
 
+// disassemble an instruction
 std::string ArmInstruction::disassemble(void) {
+	// format correct assembly for each opcode
 	switch (opcode) {
 		case OPCODE_UNKNOWN:
 			return std::format(".word 0x{:X}", (uint32_t) (word1 | (word2 << 16)));
@@ -578,9 +667,11 @@ std::string ArmInstruction::disassemble(void) {
 		case OPCODE_B_CONDITIONAL:
 			return std::format("b.{} <pc+{}>", (int) condition, immediate);
 	}
+	// if this opcode isn't implemented, return opcode and operands even if not formatted properly
 	return std::format("{} r{} r{} r{} 0x{:X}", opcode_names[(int) opcode], destination, source, source2, immediate);
 }
 
+// return length of instruction
 int ArmInstruction::get_length(void) {
 	return length;
 }
